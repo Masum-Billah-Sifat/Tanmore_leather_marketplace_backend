@@ -1,0 +1,37 @@
+// ------------------------------------------------------------
+// 📁 File: internal/repository/product_variant/interface.go
+// 🧠 Repository interface for adding a new variant to an existing product.
+//     Contains only DB operations required by the service layer.
+
+package product_variant
+
+import (
+	"context"
+
+	"tanmore_backend/internal/db/sqlc"
+
+	"github.com/google/uuid"
+)
+
+type ProductVariantRepoInterface interface {
+	// 🔁 Transaction handler
+	WithTx(ctx context.Context, fn func(q *sqlc.Queries) error) error
+
+	// 👤 Fetch seller/user by ID (moderation & approval checks)
+	GetUserByID(ctx context.Context, userID uuid.UUID) (sqlc.User, error)
+
+	// 📦 Verify product ownership
+	GetProductByIDAndSellerID(
+		ctx context.Context,
+		arg sqlc.GetProductByIDAndSellerIDParams,
+	) (sqlc.Product, error)
+
+	// 🧩 Insert product variant and return variant ID
+	InsertProductVariantReturningID(
+		ctx context.Context,
+		arg sqlc.InsertProductVariantReturningIDParams,
+	) (uuid.UUID, error)
+
+	// 📨 Insert event into events table
+	InsertEvent(ctx context.Context, arg sqlc.InsertEventParams) error
+}

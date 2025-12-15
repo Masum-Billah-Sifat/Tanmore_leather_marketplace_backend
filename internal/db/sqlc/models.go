@@ -6,14 +6,230 @@ package sqlc
 
 import (
 	"database/sql"
+	"encoding/json"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-type SystemCheckLog struct {
-	ID        uuid.UUID      `json:"id"`
-	TestLabel sql.NullString `json:"test_label"`
-	CreatedAt sql.NullTime   `json:"created_at"`
+type CartItem struct {
+	ID               uuid.UUID `json:"id"`
+	UserID           uuid.UUID `json:"user_id"`
+	VariantID        uuid.UUID `json:"variant_id"`
+	RequiredQuantity int32     `json:"required_quantity"`
+	IsActive         bool      `json:"is_active"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
+}
+
+type Category struct {
+	ID         uuid.UUID     `json:"id"`
+	ParentID   uuid.NullUUID `json:"parent_id"`
+	Name       string        `json:"name"`
+	Slug       string        `json:"slug"`
+	Level      int32         `json:"level"`
+	IsLeaf     bool          `json:"is_leaf"`
+	IsArchived bool          `json:"is_archived"`
+	CreatedAt  time.Time     `json:"created_at"`
+}
+
+type CheckoutItem struct {
+	ID                     uuid.UUID `json:"id"`
+	CheckoutSessionID      uuid.UUID `json:"checkout_session_id"`
+	UserID                 uuid.UUID `json:"user_id"`
+	SellerID               uuid.UUID `json:"seller_id"`
+	CategoryID             uuid.UUID `json:"category_id"`
+	CategoryName           string    `json:"category_name"`
+	ProductID              uuid.UUID `json:"product_id"`
+	ProductTitle           string    `json:"product_title"`
+	ProductDescription     string    `json:"product_description"`
+	ProductPrimaryImageUrl string    `json:"product_primary_image_url"`
+	VariantID              uuid.UUID `json:"variant_id"`
+	Color                  string    `json:"color"`
+	Size                   string    `json:"size"`
+	BuyingMode             string    `json:"buying_mode"`
+	UnitPrice              string    `json:"unit_price"`
+	HasDiscount            bool      `json:"has_discount"`
+	DiscountType           string    `json:"discount_type"`
+	DiscountValue          string    `json:"discount_value"`
+	RequiredQuantity       int32     `json:"required_quantity"`
+	WeightGrams            int32     `json:"weight_grams"`
+	CreatedAt              time.Time `json:"created_at"`
+}
+
+type CheckoutSession struct {
+	ID                uuid.UUID     `json:"id"`
+	UserID            uuid.UUID     `json:"user_id"`
+	Subtotal          string        `json:"subtotal"`
+	TotalWeightGrams  int32         `json:"total_weight_grams"`
+	DeliveryCharge    string        `json:"delivery_charge"`
+	TotalPayable      string        `json:"total_payable"`
+	ShippingAddressID uuid.NullUUID `json:"shipping_address_id"`
+	CreatedAt         time.Time     `json:"created_at"`
+}
+
+type Event struct {
+	ID           uuid.UUID       `json:"id"`
+	Userid       uuid.UUID       `json:"userid"`
+	EventType    string          `json:"event_type"`
+	EventPayload json.RawMessage `json:"event_payload"`
+	DispatchedAt sql.NullTime    `json:"dispatched_at"`
+	CreatedAt    time.Time       `json:"created_at"`
+}
+
+type Product struct {
+	ID          uuid.UUID `json:"id"`
+	SellerID    uuid.UUID `json:"seller_id"`
+	CategoryID  uuid.UUID `json:"category_id"`
+	Title       string    `json:"title"`
+	Description string    `json:"description"`
+	IsApproved  bool      `json:"is_approved"`
+	IsBanned    bool      `json:"is_banned"`
+	IsArchived  bool      `json:"is_archived"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type ProductMedia struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"product_id"`
+	MediaType  string    `json:"media_type"`
+	MediaUrl   string    `json:"media_url"`
+	IsPrimary  bool      `json:"is_primary"`
+	IsArchived bool      `json:"is_archived"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type ProductVariant struct {
+	ID                    uuid.UUID      `json:"id"`
+	ProductID             uuid.UUID      `json:"product_id"`
+	Color                 string         `json:"color"`
+	Size                  string         `json:"size"`
+	RetailPrice           int64          `json:"retail_price"`
+	Retaildiscounttype    sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount        sql.NullInt64  `json:"retaildiscount"`
+	WholesaleEnabled      bool           `json:"wholesale_enabled"`
+	WholesalePrice        sql.NullInt64  `json:"wholesale_price"`
+	MinQtyWholesale       sql.NullInt32  `json:"min_qty_wholesale"`
+	Wholesalediscounttype sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount     sql.NullInt64  `json:"wholesalediscount"`
+	StockQuantity         int32          `json:"stock_quantity"`
+	InStock               bool           `json:"in_stock"`
+	WeightGrams           int32          `json:"weight_grams"`
+	IsArchived            bool           `json:"is_archived"`
+	CreatedAt             time.Time      `json:"created_at"`
+	UpdatedAt             time.Time      `json:"updated_at"`
+	Hasretaildiscount     bool           `json:"hasretaildiscount"`
+	Haswholesalediscount  bool           `json:"haswholesalediscount"`
+}
+
+type ProductVariantIndex struct {
+	ID                    uuid.UUID      `json:"id"`
+	Categoryid            uuid.UUID      `json:"categoryid"`
+	Iscategoryarchived    bool           `json:"iscategoryarchived"`
+	Categoryname          string         `json:"categoryname"`
+	Sellerid              uuid.UUID      `json:"sellerid"`
+	Issellerapproved      bool           `json:"issellerapproved"`
+	Issellerarchived      bool           `json:"issellerarchived"`
+	Issellerbanned        bool           `json:"issellerbanned"`
+	Sellerstorename       string         `json:"sellerstorename"`
+	Productid             uuid.UUID      `json:"productid"`
+	Isproductapproved     bool           `json:"isproductapproved"`
+	Isproductarchived     bool           `json:"isproductarchived"`
+	Isproductbanned       bool           `json:"isproductbanned"`
+	Producttitle          string         `json:"producttitle"`
+	Productdescription    string         `json:"productdescription"`
+	Productimages         []string       `json:"productimages"`
+	Productpromovideourl  sql.NullString `json:"productpromovideourl"`
+	Variantid             uuid.UUID      `json:"variantid"`
+	Isvariantarchived     bool           `json:"isvariantarchived"`
+	Isvariantinstock      bool           `json:"isvariantinstock"`
+	Stockamount           int32          `json:"stockamount"`
+	Color                 string         `json:"color"`
+	Size                  string         `json:"size"`
+	Retailprice           int64          `json:"retailprice"`
+	Retaildiscounttype    sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount        sql.NullInt64  `json:"retaildiscount"`
+	HasRetailDiscount     bool           `json:"has_retail_discount"`
+	Haswholesaleenabled   bool           `json:"haswholesaleenabled"`
+	Wholesaleprice        sql.NullInt64  `json:"wholesaleprice"`
+	Wholesaleminquantity  sql.NullInt32  `json:"wholesaleminquantity"`
+	Wholesalediscounttype sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount     sql.NullInt64  `json:"wholesalediscount"`
+	WeightGrams           int32          `json:"weight_grams"`
+	SearchVector          interface{}    `json:"search_vector"`
+	Views                 int64          `json:"views"`
+	Createdat             time.Time      `json:"createdat"`
+	Updatedat             time.Time      `json:"updatedat"`
+}
+
+type ProductVariantSnapshot struct {
+	ID                     uuid.UUID      `json:"id"`
+	Categoryid             uuid.UUID      `json:"categoryid"`
+	Iscategoryarchived     bool           `json:"iscategoryarchived"`
+	Categoryname           string         `json:"categoryname"`
+	Sellerid               uuid.UUID      `json:"sellerid"`
+	Issellerapproved       bool           `json:"issellerapproved"`
+	Issellerarchived       bool           `json:"issellerarchived"`
+	Issellerbanned         bool           `json:"issellerbanned"`
+	Sellerstorename        string         `json:"sellerstorename"`
+	Productid              uuid.UUID      `json:"productid"`
+	Isproductapproved      bool           `json:"isproductapproved"`
+	Isproductarchived      bool           `json:"isproductarchived"`
+	Isproductbanned        bool           `json:"isproductbanned"`
+	Producttitle           string         `json:"producttitle"`
+	Productdescription     string         `json:"productdescription"`
+	Productprimaryimageurl string         `json:"productprimaryimageurl"`
+	Variantid              uuid.UUID      `json:"variantid"`
+	Isvariantarchived      bool           `json:"isvariantarchived"`
+	Isvariantinstock       bool           `json:"isvariantinstock"`
+	Stockamount            int32          `json:"stockamount"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	Retailprice            int64          `json:"retailprice"`
+	Hasretaildiscount      bool           `json:"hasretaildiscount"`
+	Retaildiscounttype     sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount         sql.NullInt64  `json:"retaildiscount"`
+	Haswholesaleenabled    bool           `json:"haswholesaleenabled"`
+	Wholesaleprice         sql.NullInt64  `json:"wholesaleprice"`
+	Wholesaleminquantity   sql.NullInt32  `json:"wholesaleminquantity"`
+	Haswholesalediscount   bool           `json:"haswholesalediscount"`
+	Wholesalediscounttype  sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount      sql.NullInt64  `json:"wholesalediscount"`
+	WeightGrams            int32          `json:"weight_grams"`
+	Createdat              time.Time      `json:"createdat"`
+	Updatedat              time.Time      `json:"updatedat"`
+}
+
+type SellerProfileMetadatum struct {
+	ID                      uuid.UUID      `json:"id"`
+	SellerID                uuid.UUID      `json:"seller_id"`
+	Sellerstorename         string         `json:"sellerstorename"`
+	Sellercontactno         string         `json:"sellercontactno"`
+	Sellerwhatsappcontactno string         `json:"sellerwhatsappcontactno"`
+	Sellerwebsitelink       sql.NullString `json:"sellerwebsitelink"`
+	Sellerfacebookpagename  sql.NullString `json:"sellerfacebookpagename"`
+	Selleremail             sql.NullString `json:"selleremail"`
+	Sellerphysicallocation  string         `json:"sellerphysicallocation"`
+	CreatedAt               time.Time      `json:"created_at"`
+	UpdatedAt               time.Time      `json:"updated_at"`
+}
+
+type ShippingAddress struct {
+	ID             uuid.UUID      `json:"id"`
+	UserID         uuid.UUID      `json:"user_id"`
+	RecipientName  string         `json:"recipient_name"`
+	RecipientPhone string         `json:"recipient_phone"`
+	RecipientEmail sql.NullString `json:"recipient_email"`
+	AddressLine    string         `json:"address_line"`
+	DeliveryNote   sql.NullString `json:"delivery_note"`
+	CityID         int32          `json:"city_id"`
+	ZoneID         int32          `json:"zone_id"`
+	AreaID         int32          `json:"area_id"`
+	Latitude       sql.NullString `json:"latitude"`
+	Longitude      sql.NullString `json:"longitude"`
+	CreatedAt      time.Time      `json:"created_at"`
 }
 
 type User struct {
@@ -22,12 +238,44 @@ type User struct {
 	PrimaryEmail            string         `json:"primary_email"`
 	DisplayName             sql.NullString `json:"display_name"`
 	ProfileImageUrl         sql.NullString `json:"profile_image_url"`
-	IsArchived              sql.NullBool   `json:"is_archived"`
-	IsBanned                sql.NullBool   `json:"is_banned"`
-	IsMuted                 sql.NullBool   `json:"is_muted"`
-	CurrentMode             sql.NullString `json:"current_mode"`
-	IsSellerProfileApproved sql.NullBool   `json:"is_seller_profile_approved"`
-	IsSellerProfileCreated  sql.NullBool   `json:"is_seller_profile_created"`
-	CreatedAt               sql.NullTime   `json:"created_at"`
-	UpdatedAt               sql.NullTime   `json:"updated_at"`
+	IsArchived              bool           `json:"is_archived"`
+	IsBanned                bool           `json:"is_banned"`
+	IsMuted                 bool           `json:"is_muted"`
+	CurrentMode             string         `json:"current_mode"`
+	IsSellerProfileApproved bool           `json:"is_seller_profile_approved"`
+	IsSellerProfileCreated  bool           `json:"is_seller_profile_created"`
+	CreatedAt               time.Time      `json:"created_at"`
+	UpdatedAt               time.Time      `json:"updated_at"`
+}
+
+type UserModeHistory struct {
+	ID         uuid.UUID `json:"id"`
+	UserID     uuid.UUID `json:"user_id"`
+	FromMode   string    `json:"from_mode"`
+	ToMode     string    `json:"to_mode"`
+	SwitchedAt time.Time `json:"switched_at"`
+}
+
+type UserRefreshToken struct {
+	ID               uuid.UUID      `json:"id"`
+	UserID           uuid.UUID      `json:"user_id"`
+	SessionID        uuid.UUID      `json:"session_id"`
+	TokenHash        string         `json:"token_hash"`
+	DeprecatedReason sql.NullString `json:"deprecated_reason"`
+	IsDeprecated     bool           `json:"is_deprecated"`
+	DeprecatedAt     sql.NullTime   `json:"deprecated_at"`
+	ExpiresAt        time.Time      `json:"expires_at"`
+	CreatedAt        time.Time      `json:"created_at"`
+}
+
+type UserSession struct {
+	ID                uuid.UUID `json:"id"`
+	UserID            uuid.UUID `json:"user_id"`
+	IpAddress         string    `json:"ip_address"`
+	UserAgent         string    `json:"user_agent"`
+	DeviceFingerprint string    `json:"device_fingerprint"`
+	IsRevoked         bool      `json:"is_revoked"`
+	IsArchived        bool      `json:"is_archived"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }

@@ -8,30 +8,32 @@ package sqlc
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
 
-const createUser = `-- name: CreateUser :one
-INSERT INTO users (google_id, primary_email, display_name, profile_image_url)
-VALUES ($1, $2, $3, $4)
-RETURNING id, google_id, primary_email, display_name, profile_image_url, is_archived, is_banned, is_muted, current_mode, is_seller_profile_approved, is_seller_profile_created, created_at, updated_at
+const getUserByGoogleID = `-- name: GetUserByGoogleID :one
+SELECT
+    id,
+    google_id,
+    primary_email,
+    display_name,
+    profile_image_url,
+    is_archived,
+    is_banned,
+    is_muted,
+    current_mode,
+    is_seller_profile_approved,
+    is_seller_profile_created,
+    created_at,
+    updated_at
+FROM users
+WHERE google_id = $1
 `
 
-type CreateUserParams struct {
-	GoogleID        string         `json:"google_id"`
-	PrimaryEmail    string         `json:"primary_email"`
-	DisplayName     sql.NullString `json:"display_name"`
-	ProfileImageUrl sql.NullString `json:"profile_image_url"`
-}
-
-func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, error) {
-	row := q.db.QueryRowContext(ctx, createUser,
-		arg.GoogleID,
-		arg.PrimaryEmail,
-		arg.DisplayName,
-		arg.ProfileImageUrl,
-	)
+func (q *Queries) GetUserByGoogleID(ctx context.Context, googleID string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUserByGoogleID, googleID)
 	var i User
 	err := row.Scan(
 		&i.ID,
@@ -52,7 +54,22 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 }
 
 const getUserByID = `-- name: GetUserByID :one
-SELECT id, google_id, primary_email, display_name, profile_image_url, is_archived, is_banned, is_muted, current_mode, is_seller_profile_approved, is_seller_profile_created, created_at, updated_at FROM users WHERE id = $1
+SELECT
+    id,
+    google_id,
+    primary_email,
+    display_name,
+    profile_image_url,
+    is_archived,
+    is_banned,
+    is_muted,
+    current_mode,
+    is_seller_profile_approved,
+    is_seller_profile_created,
+    created_at,
+    updated_at
+FROM users
+WHERE id = $1
 `
 
 func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
@@ -76,48 +93,72 @@ func (q *Queries) GetUserByID(ctx context.Context, id uuid.UUID) (User, error) {
 	return i, err
 }
 
-const listUsers = `-- name: ListUsers :many
-SELECT id, google_id, primary_email, display_name, profile_image_url, is_archived, is_banned, is_muted, current_mode, is_seller_profile_approved, is_seller_profile_created, created_at, updated_at FROM users ORDER BY created_at DESC LIMIT $1 OFFSET $2
+const insertUser = `-- name: InsertUser :one
+INSERT INTO users (
+  id, google_id, primary_email, display_name, profile_image_url,
+  is_archived, is_banned, is_muted,
+  current_mode, is_seller_profile_approved, is_seller_profile_created,
+  created_at, updated_at
+) VALUES (
+  $1, $2, $3, $4, $5,
+  $6, $7, $8,
+  $9, $10, $11,
+  $12, $13
+)
+RETURNING id
 `
 
-type ListUsersParams struct {
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+type InsertUserParams struct {
+	ID                      uuid.UUID      `json:"id"`
+	GoogleID                string         `json:"google_id"`
+	PrimaryEmail            string         `json:"primary_email"`
+	DisplayName             sql.NullString `json:"display_name"`
+	ProfileImageUrl         sql.NullString `json:"profile_image_url"`
+	IsArchived              bool           `json:"is_archived"`
+	IsBanned                bool           `json:"is_banned"`
+	IsMuted                 bool           `json:"is_muted"`
+	CurrentMode             string         `json:"current_mode"`
+	IsSellerProfileApproved bool           `json:"is_seller_profile_approved"`
+	IsSellerProfileCreated  bool           `json:"is_seller_profile_created"`
+	CreatedAt               time.Time      `json:"created_at"`
+	UpdatedAt               time.Time      `json:"updated_at"`
 }
 
-func (q *Queries) ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error) {
-	rows, err := q.db.QueryContext(ctx, listUsers, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []User
-	for rows.Next() {
-		var i User
-		if err := rows.Scan(
-			&i.ID,
-			&i.GoogleID,
-			&i.PrimaryEmail,
-			&i.DisplayName,
-			&i.ProfileImageUrl,
-			&i.IsArchived,
-			&i.IsBanned,
-			&i.IsMuted,
-			&i.CurrentMode,
-			&i.IsSellerProfileApproved,
-			&i.IsSellerProfileCreated,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, insertUser,
+		arg.ID,
+		arg.GoogleID,
+		arg.PrimaryEmail,
+		arg.DisplayName,
+		arg.ProfileImageUrl,
+		arg.IsArchived,
+		arg.IsBanned,
+		arg.IsMuted,
+		arg.CurrentMode,
+		arg.IsSellerProfileApproved,
+		arg.IsSellerProfileCreated,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateUserCurrentMode = `-- name: UpdateUserCurrentMode :exec
+UPDATE users
+SET current_mode = $2,
+    updated_at = $3
+WHERE id = $1
+`
+
+type UpdateUserCurrentModeParams struct {
+	ID          uuid.UUID `json:"id"`
+	CurrentMode string    `json:"current_mode"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+func (q *Queries) UpdateUserCurrentMode(ctx context.Context, arg UpdateUserCurrentModeParams) error {
+	_, err := q.db.ExecContext(ctx, updateUserCurrentMode, arg.ID, arg.CurrentMode, arg.UpdatedAt)
+	return err
 }

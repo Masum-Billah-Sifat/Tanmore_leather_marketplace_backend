@@ -1,0 +1,1 @@
+DROP TABLE IF EXISTS seller_profile_metadata CASCADE;
