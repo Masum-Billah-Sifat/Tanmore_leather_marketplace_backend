@@ -14,6 +14,50 @@ import (
 	"github.com/google/uuid"
 )
 
+const fetchUndispatchedEvents = `-- name: FetchUndispatchedEvents :many
+SELECT
+  id,
+  userid,
+  event_type,
+  event_payload,
+  dispatched_at,
+  created_at
+FROM events
+WHERE dispatched_at IS NULL
+ORDER BY created_at ASC
+LIMIT $1
+`
+
+func (q *Queries) FetchUndispatchedEvents(ctx context.Context, limit int32) ([]Event, error) {
+	rows, err := q.db.QueryContext(ctx, fetchUndispatchedEvents, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Event
+	for rows.Next() {
+		var i Event
+		if err := rows.Scan(
+			&i.ID,
+			&i.Userid,
+			&i.EventType,
+			&i.EventPayload,
+			&i.DispatchedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertEvent = `-- name: InsertEvent :exec
 INSERT INTO events (
     id,
@@ -46,5 +90,25 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.DispatchedAt,
 		arg.CreatedAt,
 	)
+	return err
+}
+
+const markEventDispatched = `-- name: MarkEventDispatched :exec
+
+
+UPDATE events
+SET dispatched_at = $1
+WHERE id = $2
+  AND dispatched_at IS NULL
+`
+
+type MarkEventDispatchedParams struct {
+	DispatchedAt sql.NullTime `json:"dispatched_at"`
+	ID           uuid.UUID    `json:"id"`
+}
+
+// Use positional arg for LIMIT
+func (q *Queries) MarkEventDispatched(ctx context.Context, arg MarkEventDispatchedParams) error {
+	_, err := q.db.ExecContext(ctx, markEventDispatched, arg.DispatchedAt, arg.ID)
 	return err
 }

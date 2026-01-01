@@ -13,13 +13,13 @@ import (
 )
 
 type CartItem struct {
-	ID               uuid.UUID `json:"id"`
-	UserID           uuid.UUID `json:"user_id"`
-	VariantID        uuid.UUID `json:"variant_id"`
-	RequiredQuantity int32     `json:"required_quantity"`
-	IsActive         bool      `json:"is_active"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID               uuid.UUID     `json:"id"`
+	UserID           uuid.UUID     `json:"user_id"`
+	VariantID        uuid.UUID     `json:"variant_id"`
+	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
+	IsActive         bool          `json:"is_active"`
+	CreatedAt        time.Time     `json:"created_at"`
+	UpdatedAt        time.Time     `json:"updated_at"`
 }
 
 type Category struct {
@@ -55,17 +55,18 @@ type CheckoutItem struct {
 	RequiredQuantity       int32     `json:"required_quantity"`
 	WeightGrams            int32     `json:"weight_grams"`
 	CreatedAt              time.Time `json:"created_at"`
+	SellerStoreName        string    `json:"seller_store_name"`
 }
 
 type CheckoutSession struct {
-	ID                uuid.UUID     `json:"id"`
-	UserID            uuid.UUID     `json:"user_id"`
-	Subtotal          string        `json:"subtotal"`
-	TotalWeightGrams  int32         `json:"total_weight_grams"`
-	DeliveryCharge    string        `json:"delivery_charge"`
-	TotalPayable      string        `json:"total_payable"`
-	ShippingAddressID uuid.NullUUID `json:"shipping_address_id"`
-	CreatedAt         time.Time     `json:"created_at"`
+	ID                uuid.UUID      `json:"id"`
+	UserID            uuid.UUID      `json:"user_id"`
+	Subtotal          string         `json:"subtotal"`
+	TotalWeightGrams  int32          `json:"total_weight_grams"`
+	DeliveryCharge    sql.NullString `json:"delivery_charge"`
+	TotalPayable      string         `json:"total_payable"`
+	ShippingAddressID uuid.NullUUID  `json:"shipping_address_id"`
+	CreatedAt         time.Time      `json:"created_at"`
 }
 
 type Event struct {
@@ -99,6 +100,32 @@ type ProductMedia struct {
 	IsArchived bool      `json:"is_archived"`
 	CreatedAt  time.Time `json:"created_at"`
 	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+type ProductReview struct {
+	ID             uuid.UUID      `json:"id"`
+	ProductID      uuid.UUID      `json:"product_id"`
+	ReviewerUserID uuid.UUID      `json:"reviewer_user_id"`
+	ReviewText     string         `json:"review_text"`
+	ReviewImageUrl sql.NullString `json:"review_image_url"`
+	IsEdited       bool           `json:"is_edited"`
+	IsArchived     bool           `json:"is_archived"`
+	IsBanned       bool           `json:"is_banned"`
+	CreatedAt      time.Time      `json:"created_at"`
+	UpdatedAt      time.Time      `json:"updated_at"`
+}
+
+type ProductReviewReply struct {
+	ID            uuid.UUID      `json:"id"`
+	ReviewID      uuid.UUID      `json:"review_id"`
+	SellerUserID  uuid.UUID      `json:"seller_user_id"`
+	ReplyText     string         `json:"reply_text"`
+	ReplyImageUrl sql.NullString `json:"reply_image_url"`
+	IsEdited      bool           `json:"is_edited"`
+	IsArchived    bool           `json:"is_archived"`
+	IsBanned      bool           `json:"is_banned"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
 }
 
 type ProductVariant struct {

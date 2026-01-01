@@ -12,7 +12,6 @@ package product_variant
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	sqlc "tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_disable_wholesale"
@@ -119,15 +118,9 @@ func (s *DisableWholesaleModeService) Start(
 		// ------------------------------------------------------------
 		// Step 4: Emit event with full payload (for background processors)
 		payload, err := json.Marshal(map[string]interface{}{
-			"user_id":                 input.UserID,
-			"product_id":              input.ProductID,
-			"variant_id":              input.VariantID,
-			"wholesale_enabled":       false,
-			"wholesale_price":         nil,
-			"min_qty_wholesale":       nil,
-			"has_wholesale_discount":  false,
-			"wholesale_discount_type": nil,
-			"wholesale_discount":      nil,
+			"user_id":    input.UserID,
+			"product_id": input.ProductID,
+			"variant_id": input.VariantID,
 		})
 		if err != nil {
 			return errors.NewServerError("marshal event payload")
@@ -138,7 +131,7 @@ func (s *DisableWholesaleModeService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.wholesale_mode.disabled",
 			EventPayload: payload,
-			DispatchedAt: sqlnull.Time(time.Time{}),
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

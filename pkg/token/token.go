@@ -9,7 +9,10 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
+
+	// "errors"
+	"tanmore_backend/pkg/errors"
+	"tanmore_backend/pkg/response"
 	"time"
 
 	"context"
@@ -60,7 +63,7 @@ func ParseAccessToken(tokenStr string) (*AccessTokenClaims, error) {
 
 	claims, ok := token.Claims.(*AccessTokenClaims)
 	if !ok || !token.Valid {
-		return nil, errors.New("invalid access token")
+		return nil, errors.NewAuthError("invalid access token")
 	}
 
 	return claims, nil
@@ -75,12 +78,39 @@ const (
 	CtxModeKey      ctxKey = "current_mode"
 )
 
-// ✅ AttachAccessToken middleware — parses token and sets values into context
+// // ✅ AttachAccessToken middleware — parses token and sets values into context
+// func AttachAccessToken(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		authHeader := r.Header.Get("Authorization")
+// 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+// 			next.ServeHTTP(w, r) // skip silently if no token
+// 			return
+// 		}
+
+// 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
+// 		claims, err := ParseAccessToken(rawToken)
+// 		if err != nil {
+// 			// Skip adding to context if parsing fails
+// 			next.ServeHTTP(w, r)
+// 			return
+// 		}
+
+// 		ctx := context.WithValue(r.Context(), CtxUserIDKey, claims.Sub)
+// 		ctx = context.WithValue(ctx, CtxSessionIDKey, claims.SID)
+// 		ctx = context.WithValue(ctx, CtxModeKey, claims.Mode)
+
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
+
+// updated version of AttachAccessToken function here
+
 func AttachAccessToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-			next.ServeHTTP(w, r) // skip silently if no token
+			response.Unauthorized(w, errors.NewAuthError("missing access token"))
 			return
 		}
 
@@ -88,8 +118,7 @@ func AttachAccessToken(next http.Handler) http.Handler {
 
 		claims, err := ParseAccessToken(rawToken)
 		if err != nil {
-			// Skip adding to context if parsing fails
-			next.ServeHTTP(w, r)
+			response.Unauthorized(w, errors.NewAuthError("invalid access token"))
 			return
 		}
 

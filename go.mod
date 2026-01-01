@@ -38,6 +38,7 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/lib/pq v1.10.9
 	github.com/rs/zerolog v1.34.0
+	github.com/shopspring/decimal v1.4.0
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/sync v0.15.0 // indirect
 	golang.org/x/text v0.26.0 // indirect

@@ -145,6 +145,24 @@ func (q *Queries) InsertUser(ctx context.Context, arg InsertUserParams) (uuid.UU
 	return id, err
 }
 
+const updateSellerProfileCreated = `-- name: UpdateSellerProfileCreated :exec
+UPDATE users
+SET is_seller_profile_created = $1,
+    updated_at = $3
+WHERE id = $2
+`
+
+type UpdateSellerProfileCreatedParams struct {
+	IsSellerProfileCreated bool      `json:"is_seller_profile_created"`
+	ID                     uuid.UUID `json:"id"`
+	UpdatedAt              time.Time `json:"updated_at"`
+}
+
+func (q *Queries) UpdateSellerProfileCreated(ctx context.Context, arg UpdateSellerProfileCreatedParams) error {
+	_, err := q.db.ExecContext(ctx, updateSellerProfileCreated, arg.IsSellerProfileCreated, arg.ID, arg.UpdatedAt)
+	return err
+}
+
 const updateUserCurrentMode = `-- name: UpdateUserCurrentMode :exec
 UPDATE users
 SET current_mode = $2,

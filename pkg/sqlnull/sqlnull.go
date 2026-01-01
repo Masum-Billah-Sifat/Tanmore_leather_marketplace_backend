@@ -99,3 +99,53 @@ func Int32From32(i int32) sql.NullInt32 {
 		Valid: true,
 	}
 }
+
+// In pkg/sqlnull/sqlnull.go
+func DecimalPtr(s *string) sql.NullString {
+	if s == nil {
+		return sql.NullString{}
+	}
+	return sql.NullString{
+		String: *s,
+		Valid:  true,
+	}
+}
+
+func Float64Ptr(f *float64) sql.NullFloat64 {
+	if f == nil {
+		return sql.NullFloat64{}
+	}
+	return sql.NullFloat64{
+		Float64: *f,
+		Valid:   true,
+	}
+}
+
+func StringOrEmpty(ns sql.NullString) string {
+	if ns.Valid {
+		return ns.String
+	}
+	return ""
+}
+
+func Int64OrZero(ni sql.NullInt64) int64 {
+	if ni.Valid {
+		return ni.Int64
+	}
+	return 0
+}
+
+func Int32OrZero(ni sql.NullInt32) int32 {
+	if ni.Valid {
+		return ni.Int32
+	}
+	return 0
+}
+
+// ToStringPtr converts sql.NullString to *string
+func ToStringPtr(ns sql.NullString) *string {
+	if ns.Valid {
+		return &ns.String
+	}
+	return nil
+}

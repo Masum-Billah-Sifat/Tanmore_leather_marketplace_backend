@@ -34,4 +34,22 @@ type ProductVariantRepoInterface interface {
 
 	// 📨 Insert event into events table
 	InsertEvent(ctx context.Context, arg sqlc.InsertEventParams) error
+
+	// 🧠 Fetch category details
+	GetCategoryByID(ctx context.Context, categoryID uuid.UUID) (sqlc.Category, error)
+
+	// 🧠 Fetch seller profile metadata
+	GetSellerProfileMetadataBySellerID(ctx context.Context, sellerID uuid.UUID) (sqlc.SellerProfileMetadatum, error)
+
+	// 🖼️ Fetch all non-archived medias by type
+	GetActiveMediasByProductID(
+		ctx context.Context,
+		arg sqlc.GetActiveMediasByProductIDParams,
+	) ([]sqlc.ProductMedia, error)
+
+	// 🖼️ Fetch primary product image
+	GetPrimaryProductImageByProductID(
+		ctx context.Context,
+		arg sqlc.GetPrimaryProductImageByProductIDParams,
+	) (sqlc.ProductMedia, error)
 }

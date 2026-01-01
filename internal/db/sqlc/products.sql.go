@@ -7,10 +7,69 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+const archiveProduct = `-- name: ArchiveProduct :exec
+UPDATE products
+SET is_archived = $3,
+    updated_at = $4
+WHERE id = $1 AND seller_id = $2
+`
+
+type ArchiveProductParams struct {
+	ID         uuid.UUID `json:"id"`
+	SellerID   uuid.UUID `json:"seller_id"`
+	IsArchived bool      `json:"is_archived"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+func (q *Queries) ArchiveProduct(ctx context.Context, arg ArchiveProductParams) error {
+	_, err := q.db.ExecContext(ctx, archiveProduct,
+		arg.ID,
+		arg.SellerID,
+		arg.IsArchived,
+		arg.UpdatedAt,
+	)
+	return err
+}
+
+const getProductByID = `-- name: GetProductByID :one
+SELECT
+    id,
+    seller_id,
+    category_id,
+    title,
+    description,
+    is_approved,
+    is_banned,
+    is_archived,
+    created_at,
+    updated_at
+FROM products
+WHERE id = $1
+`
+
+func (q *Queries) GetProductByID(ctx context.Context, id uuid.UUID) (Product, error) {
+	row := q.db.QueryRowContext(ctx, getProductByID, id)
+	var i Product
+	err := row.Scan(
+		&i.ID,
+		&i.SellerID,
+		&i.CategoryID,
+		&i.Title,
+		&i.Description,
+		&i.IsApproved,
+		&i.IsBanned,
+		&i.IsArchived,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
 
 const getProductByIDAndSellerID = `-- name: GetProductByIDAndSellerID :one
 SELECT
@@ -100,4 +159,33 @@ func (q *Queries) InsertProduct(ctx context.Context, arg InsertProductParams) (u
 	var id uuid.UUID
 	err := row.Scan(&id)
 	return id, err
+}
+
+const updateProductTitleDesc = `-- name: UpdateProductTitleDesc :exec
+UPDATE products
+SET
+    title       = COALESCE($1::TEXT, title),
+    description = COALESCE($2::TEXT, description),
+    updated_at  = $3
+WHERE id = $4
+  AND seller_id = $5
+`
+
+type UpdateProductTitleDescParams struct {
+	Title       sql.NullString `json:"title"`
+	Description sql.NullString `json:"description"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	ProductID   uuid.UUID      `json:"product_id"`
+	SellerID    uuid.UUID      `json:"seller_id"`
+}
+
+func (q *Queries) UpdateProductTitleDesc(ctx context.Context, arg UpdateProductTitleDescParams) error {
+	_, err := q.db.ExecContext(ctx, updateProductTitleDesc,
+		arg.Title,
+		arg.Description,
+		arg.UpdatedAt,
+		arg.ProductID,
+		arg.SellerID,
+	)
+	return err
 }

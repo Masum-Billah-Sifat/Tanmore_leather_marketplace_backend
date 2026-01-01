@@ -17,3 +17,15 @@ func IsValid(input string) bool {
 	_, err := uuid.Parse(input)
 	return err == nil
 }
+
+// ✅ Parse a string to *uuid.UUID — return nil if blank or invalid
+func ParsePtr(input string) *uuid.UUID {
+	if input == "" {
+		return nil
+	}
+	id, err := uuid.Parse(input)
+	if err != nil {
+		return nil
+	}
+	return &id
+}

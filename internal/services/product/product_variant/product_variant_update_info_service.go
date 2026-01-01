@@ -12,7 +12,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_update_info"
@@ -140,7 +139,7 @@ func (s *UpdateVariantInfoService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.info.updated",
 			EventPayload: payloadBytes,
-			DispatchedAt: sqlnull.Time(time.Time{}),
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

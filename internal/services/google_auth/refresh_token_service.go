@@ -125,7 +125,7 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 		}
 
 		// Step 7: Generate new access token
-		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 15)
+		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 10080)
 		if err != nil {
 			return errors.NewServerError("generating access token")
 		}

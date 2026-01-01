@@ -1,5 +1,4 @@
-// db.go — Uses standard sql.DB instead of pgxpool
-
+// updated db.go for background jobs added
 package db
 
 import (
@@ -9,11 +8,13 @@ import (
 	"time"
 
 	"tanmore_backend/internal/config"
+	"tanmore_backend/internal/db/sqlc" // ✅ import SQLC package
 
 	_ "github.com/lib/pq"
 )
 
-var DB *sql.DB
+var DB *sql.DB            // ✅ global raw DB
+var Queries *sqlc.Queries // ✅ global SQLC wrapper
 
 func ConnectDB(cfg *config.Config) {
 	dbURL := fmt.Sprintf(
@@ -40,8 +41,56 @@ func ConnectDB(cfg *config.Config) {
 		log.Fatal("❌ Unable to ping DB:", err)
 	}
 
+	// ✅ Initialize SQLC Queries instance
+	Queries = sqlc.New(DB)
+
 	fmt.Println("✅ Connected to PostgreSQL successfully")
 }
+
+// db.go — Uses standard sql.DB instead of pgxpool
+
+// package db
+
+// import (
+// 	"database/sql"
+// 	"fmt"
+// 	"log"
+// 	"time"
+
+// 	"tanmore_backend/internal/config"
+
+// 	_ "github.com/lib/pq"
+// )
+
+// var DB *sql.DB
+
+// func ConnectDB(cfg *config.Config) {
+// 	dbURL := fmt.Sprintf(
+// 		"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+// 		cfg.DBUser,
+// 		cfg.DBPassword,
+// 		cfg.DBHost,
+// 		cfg.DBPort,
+// 		cfg.DBName,
+// 	)
+
+// 	var err error
+// 	DB, err = sql.Open("postgres", dbURL)
+// 	if err != nil {
+// 		log.Fatal("❌ Unable to open DB:", err)
+// 	}
+
+// 	DB.SetConnMaxLifetime(time.Minute * 5)
+// 	DB.SetMaxIdleConns(5)
+// 	DB.SetMaxOpenConns(10)
+
+// 	err = DB.Ping()
+// 	if err != nil {
+// 		log.Fatal("❌ Unable to ping DB:", err)
+// 	}
+
+// 	fmt.Println("✅ Connected to PostgreSQL successfully")
+// }
 
 // // db.go — Connects to PostgreSQL using pgxpool
 

@@ -11,7 +11,6 @@ package product_variant
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_update_stock_quantity"
@@ -126,7 +125,7 @@ func (s *UpdateVariantStockQuantityService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.stock_quantity.updated",
 			EventPayload: payload,
-			DispatchedAt: sqlnull.Time(time.Time{}), // NULL for undelivered
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

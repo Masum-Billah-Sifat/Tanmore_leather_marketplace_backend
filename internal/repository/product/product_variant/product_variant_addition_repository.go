@@ -79,3 +79,35 @@ func (r *ProductVariantRepository) InsertEvent(
 ) error {
 	return r.q.InsertEvent(ctx, arg)
 }
+
+// 🧠 Fetch category info by ID
+func (r *ProductVariantRepository) GetCategoryByID(
+	ctx context.Context,
+	categoryID uuid.UUID,
+) (sqlc.Category, error) {
+	return r.q.GetCategoryByID(ctx, categoryID)
+}
+
+// 🧠 Fetch seller profile metadata
+func (r *ProductVariantRepository) GetSellerProfileMetadataBySellerID(
+	ctx context.Context,
+	sellerID uuid.UUID,
+) (sqlc.SellerProfileMetadatum, error) {
+	return r.q.GetSellerProfileMetadataBySellerID(ctx, sellerID)
+}
+
+// 🖼️ Get all active medias for product
+func (r *ProductVariantRepository) GetActiveMediasByProductID(
+	ctx context.Context,
+	arg sqlc.GetActiveMediasByProductIDParams,
+) ([]sqlc.ProductMedia, error) {
+	return r.q.GetActiveMediasByProductID(ctx, arg)
+}
+
+// 🖼️ Get primary image for product
+func (r *ProductVariantRepository) GetPrimaryProductImageByProductID(
+	ctx context.Context,
+	arg sqlc.GetPrimaryProductImageByProductIDParams,
+) (sqlc.ProductMedia, error) {
+	return r.q.GetPrimaryProductImageByProductID(ctx, arg)
+}

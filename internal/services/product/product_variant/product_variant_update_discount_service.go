@@ -13,7 +13,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_update_discount"
@@ -98,53 +97,6 @@ func (s *UpdateVariantRetailDiscountService) Start(
 			return errors.NewValidationError("retail_discount", "retail discount is not enabled for this variant")
 		}
 
-		// // ------------------------------------------------------------
-		// // Step 2: Perform COALESCE-based update
-		// err = q.UpdateRetailDiscount(ctx, sqlc.UpdateRetailDiscountParams{
-		// 	Retaildiscounttype: sqlnull.StringFromPtr(input.RetailDiscountType),
-		// 	Retaildiscount:     sqlnull.Int64FromPtr(input.RetailDiscount),
-		// 	UpdatedAt:          now,
-		// 	VariantID:          input.VariantID,
-		// 	ProductID:          input.ProductID,
-		// })
-		// if err != nil {
-		// 	return errors.NewTableError("product_variants.update", err.Error())
-		// }
-
-		// // ------------------------------------------------------------
-		// // Step 3: Emit variant.retail_discount.updated event
-		// updatedFields := buildRetailDiscountFieldMap(input.RetailDiscount, input.RetailDiscountType)
-
-		// ------------------------------------------------------------
-		// Step 2: Update retail discount (COALESCE style)
-
-		// var discountNull sql.NullInt64
-		// var discountTypeNull sql.NullString
-
-		// updatedFields := make(map[string]interface{})
-
-		// if input.RetailDiscount != nil {
-		// 	discountNull = sqlnull.Int64(*input.RetailDiscount)
-		// 	updatedFields["retail_discount"] = *input.RetailDiscount
-		// }
-
-		// if input.RetailDiscountType != nil {
-		// 	discountTypeNull = sqlnull.String(*input.RetailDiscountType)
-		// 	updatedFields["retail_discount_type"] = *input.RetailDiscountType
-		// }
-
-		// err = q.UpdateRetailDiscount(ctx, sqlc.UpdateRetailDiscountParams{
-		// 	Retaildiscount:     discountNull,
-		// 	Retaildiscounttype: discountTypeNull,
-		// 	UpdatedAt:          now,
-		// 	VariantID:          input.VariantID,
-		// 	ProductID:          input.ProductID,
-		// })
-		// if err != nil {
-		// 	return errors.NewTableError("product_variants.update", err.Error())
-
-		// }
-
 		// ------------------------------------------------------------
 		// Step 2: Update retail discount (COALESCE-style)
 
@@ -191,7 +143,7 @@ func (s *UpdateVariantRetailDiscountService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.retail_discount.updated",
 			EventPayload: payloadBytes,
-			DispatchedAt: sqlnull.Time(time.Time{}), // NULL
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

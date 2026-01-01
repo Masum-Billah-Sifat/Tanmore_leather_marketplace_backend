@@ -13,7 +13,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"time"
 
 	sqlc "tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_update_wholesale_discount"
@@ -145,7 +144,7 @@ func (s *UpdateWholesaleDiscountService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.wholesale_discount.updated",
 			EventPayload: payloadBytes,
-			DispatchedAt: sqlnull.Time(time.Time{}), // NULL
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

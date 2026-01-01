@@ -54,3 +54,11 @@ UPDATE users
 SET current_mode = $2,
     updated_at = $3
 WHERE id = $1;
+
+
+
+-- name: UpdateSellerProfileCreated :exec
+UPDATE users
+SET is_seller_profile_created = $1,
+    updated_at = $3
+WHERE id = $2;

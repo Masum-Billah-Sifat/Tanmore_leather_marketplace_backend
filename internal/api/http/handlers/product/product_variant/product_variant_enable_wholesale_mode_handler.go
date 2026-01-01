@@ -3,7 +3,7 @@
 // 🧠 Handles POST /api/seller/products/:product_id/variants/:variant_id/wholesale-mode
 //     - Extracts seller user_id from context
 //     - Extracts product_id and variant_id from path
-//     - Parses wholesale_price and min_qty_wholesale from JSON body
+//     - Parses wholesale pricing and discount fields
 //     - Calls service layer
 //     - Returns variant_id and wholesale enabled status
 
@@ -62,15 +62,17 @@ func (h *EnableVariantWholesaleModeHandler) Handle(w http.ResponseWriter, r *htt
 
 	// 4️⃣ Parse request JSON body
 	var req struct {
-		WholesalePrice  int64 `json:"wholesale_price"`
-		MinQtyWholesale int64 `json:"min_qty_wholesale"`
+		WholesalePrice        int64   `json:"wholesale_price"`
+		MinQtyWholesale       int64   `json:"min_qty_wholesale"`
+		WholesaleDiscount     *int64  `json:"wholesale_discount,omitempty"`      // optional
+		WholesaleDiscountType *string `json:"wholesale_discount_type,omitempty"` // optional: "flat" or "percentage"
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		response.BadRequest(w, errors.NewValidationError("body", "invalid JSON body"))
 		return
 	}
 
-	// 5️⃣ Validate input
+	// 5️⃣ Validate required fields
 	if req.WholesalePrice <= 0 {
 		response.BadRequest(w, errors.NewValidationError("wholesale_price", "must be a positive number"))
 		return
@@ -80,23 +82,33 @@ func (h *EnableVariantWholesaleModeHandler) Handle(w http.ResponseWriter, r *htt
 		return
 	}
 
-	// 6️⃣ Build service input
-	input := service.EnableWholesaleModeInput{
-		UserID:          userID,
-		ProductID:       productID,
-		VariantID:       variantID,
-		WholesalePrice:  req.WholesalePrice,
-		MinQtyWholesale: req.MinQtyWholesale,
+	// 6️⃣ Validate optional discount type (if provided)
+	if req.WholesaleDiscountType != nil {
+		if *req.WholesaleDiscountType != "flat" && *req.WholesaleDiscountType != "percentage" {
+			response.BadRequest(w, errors.NewValidationError("wholesale_discount_type", "must be 'flat' or 'percentage'"))
+			return
+		}
 	}
 
-	// 7️⃣ Call service
+	// 7️⃣ Build service input
+	input := service.EnableWholesaleModeInput{
+		UserID:                userID,
+		ProductID:             productID,
+		VariantID:             variantID,
+		WholesalePrice:        req.WholesalePrice,
+		MinQtyWholesale:       req.MinQtyWholesale,
+		WholesaleDiscount:     req.WholesaleDiscount,
+		WholesaleDiscountType: req.WholesaleDiscountType,
+	}
+
+	// 8️⃣ Call service
 	result, err := h.Service.Start(ctx, input)
 	if err != nil {
 		response.ServerError(w, err)
 		return
 	}
 
-	// 8️⃣ Return success
+	// 9️⃣ Return success
 	response.OK(w, "Wholesale mode enabled successfully", map[string]interface{}{
 		"variant_id":        result.VariantID,
 		"wholesale_enabled": result.WholesaleEnabled,

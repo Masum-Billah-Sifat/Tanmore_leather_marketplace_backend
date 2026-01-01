@@ -2,8 +2,11 @@
 // 📁 File: internal/service/product/create_product_service.go
 // 🧠 Handles seller product creation workflow.
 //     - Validates seller moderation & approval
+//     - Validates seller profile metadata
+//     - Validates category (leaf + not archived)
 //     - Creates product
-//     - Creates one or more variants
+//     - Creates product medias (images + promo video)
+//     - Creates variants
 //     - Emits product.created event
 //     - Returns product_id and variant_ids
 
@@ -12,7 +15,6 @@ package product
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_creation"
@@ -87,16 +89,13 @@ func (s *CreateProductService) Start(
 ) (*CreateProductResult, error) {
 
 	now := timeutil.NowUTC()
-
 	productID := uuidutil.New()
 	variantIDs := make([]uuid.UUID, 0)
 
-	// ------------------------------------------------------------
-	// Step 1: Everything inside a transaction
 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
 
 		// ------------------------------------------------------------
-		// Step 1.1: Validate seller
+		// Step 1: Validate seller
 		user, err := q.GetUserByID(ctx, input.UserID)
 		if err != nil {
 			return errors.NewNotFoundError("user")
@@ -111,7 +110,29 @@ func (s *CreateProductService) Start(
 		}
 
 		// ------------------------------------------------------------
-		// Step 1.2: Insert product
+		// Step 2: Fetch seller profile metadata (for event payload)
+		sellerMeta, err := q.GetSellerProfileMetadataBySellerID(ctx, input.UserID)
+		if err != nil {
+			return errors.NewNotFoundError("seller_profile_metadata")
+		}
+
+		// ------------------------------------------------------------
+		// Step 3: Validate category
+		category, err := q.GetCategoryByID(ctx, input.CategoryID)
+		if err != nil {
+			return errors.NewNotFoundError("category")
+		}
+
+		if category.IsArchived {
+			return errors.NewValidationError("category", "category is archived")
+		}
+
+		if !category.IsLeaf {
+			return errors.NewValidationError("category", "category must be a leaf node")
+		}
+
+		// ------------------------------------------------------------
+		// Step 4: Insert product
 		_, err = q.InsertProduct(ctx, sqlc.InsertProductParams{
 			ID:          productID,
 			SellerID:    input.UserID,
@@ -129,8 +150,52 @@ func (s *CreateProductService) Start(
 		}
 
 		// ------------------------------------------------------------
+		// Step 5: Insert product images (Meta-grade explicit loop)
+		var primaryImageURL string
+
+		for i, url := range input.ImageURLs {
+			isPrimary := i == 0
+			if isPrimary {
+				primaryImageURL = url
+			}
+
+			_, err := q.InsertProductMedia(ctx, sqlc.InsertProductMediaParams{
+				ID:         uuidutil.New(),
+				ProductID:  productID,
+				MediaType:  "image",
+				MediaUrl:   url,
+				IsPrimary:  isPrimary,
+				IsArchived: false,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			})
+			if err != nil {
+				return errors.NewTableError("product_medias.insert.image", err.Error())
+			}
+		}
+
 		// ------------------------------------------------------------
-		// Step 1.3: Insert variants
+		// Step 6: Insert promo video (if provided)
+		if input.PromoVideoURL != nil {
+			_, err := q.InsertProductMedia(ctx, sqlc.InsertProductMediaParams{
+				ID:         uuidutil.New(),
+				ProductID:  productID,
+				MediaType:  "video",
+				MediaUrl:   *input.PromoVideoURL,
+				IsPrimary:  false,
+				IsArchived: false,
+				CreatedAt:  now,
+				UpdatedAt:  now,
+			})
+			if err != nil {
+				return errors.NewTableError("product_medias.insert.video", err.Error())
+			}
+		}
+
+		// ------------------------------------------------------------
+		// Step 7: Insert variants (UNCHANGED – already correct)
+		variantPayloads := make([]map[string]interface{}, 0, len(input.Variants))
+
 		for _, v := range input.Variants {
 
 			variantID := uuidutil.New()
@@ -169,15 +234,54 @@ func (s *CreateProductService) Start(
 			}
 
 			variantIDs = append(variantIDs, variantID)
+
+			variantPayloads = append(variantPayloads, map[string]interface{}{
+				"variant_id":              variantID,
+				"color":                   v.Color,
+				"size":                    v.Size,
+				"retail_price":            v.RetailPrice,
+				"in_stock":                v.InStock,
+				"stock_quantity":          v.StockQuantity,
+				"retail_discount":         v.RetailDiscount,
+				"retail_discount_type":    v.RetailDiscountType,
+				"wholesale_price":         v.WholesalePrice,
+				"min_qty_wholesale":       v.MinQtyWholesale,
+				"wholesale_discount":      v.WholesaleDiscount,
+				"wholesale_discount_type": v.WholesaleDiscountType,
+				"weight_grams":            v.WeightGrams,
+			})
 		}
 
 		// ------------------------------------------------------------
-		// Step 1.4: Insert event
-		rawPayload, err := json.Marshal(map[string]interface{}{
-			"user_id":    input.UserID,
-			"product_id": productID,
-			"variants":   input.Variants,
-		})
+		// Step 8: Emit product.created event (FULL payload)
+		eventPayload := map[string]interface{}{
+			"product": map[string]interface{}{
+				"id":                productID,
+				"title":             input.Title,
+				"description":       input.Description,
+				"image_urls":        input.ImageURLs,
+				"primary_image_url": primaryImageURL,
+				"promo_video_url":   input.PromoVideoURL,
+				"is_approved":       false,
+				"is_archived":       false,
+				"is_banned":         false,
+			},
+			"category": map[string]interface{}{
+				"id":          category.ID,
+				"name":        category.Name,
+				"is_archived": category.IsArchived,
+			},
+			"seller": map[string]interface{}{
+				"id":                         user.ID,
+				"is_archived":                user.IsArchived,
+				"is_banned":                  user.IsBanned,
+				"is_seller_profile_approved": user.IsSellerProfileApproved,
+				"sellerstorename":            sellerMeta.Sellerstorename,
+			},
+			"variants": variantPayloads,
+		}
+
+		rawPayload, err := json.Marshal(eventPayload)
 		if err != nil {
 			return errors.NewServerError("marshal event payload")
 		}
@@ -187,7 +291,7 @@ func (s *CreateProductService) Start(
 			Userid:       input.UserID,
 			EventType:    "product.created",
 			EventPayload: rawPayload,
-			DispatchedAt: sqlnull.Time(time.Time{}),
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {
@@ -201,12 +305,8 @@ func (s *CreateProductService) Start(
 		return nil, err
 	}
 
-	// ------------------------------------------------------------
-	// Step 2: Prepare response
-	result := &CreateProductResult{
+	return &CreateProductResult{
 		ProductID:  productID,
 		VariantIDs: variantIDs,
-	}
-
-	return result, nil
+	}, nil
 }

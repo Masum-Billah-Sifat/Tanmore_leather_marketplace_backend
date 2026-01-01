@@ -12,7 +12,6 @@ package product_variant
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	sqlc "tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_variant/product_variant_add_wholesale_discount"
@@ -135,7 +134,7 @@ func (s *AddWholesaleDiscountService) Start(
 			Userid:       input.UserID,
 			EventType:    "variant.wholesale_discount.added",
 			EventPayload: payload,
-			DispatchedAt: sqlnull.Time(time.Time{}),
+			DispatchedAt: sqlnull.TimePtr(nil),
 			CreatedAt:    now,
 		})
 		if err != nil {

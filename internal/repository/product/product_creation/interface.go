@@ -31,4 +31,13 @@ type ProductRepoInterface interface {
 
 	// 📨 Insert event into outbox/events table
 	InsertEvent(ctx context.Context, arg sqlc.InsertEventParams) error
+
+	// 🧠 Fetch seller profile metadata (to extract sellerstorename)
+	GetSellerProfileMetadataBySellerID(ctx context.Context, sellerID uuid.UUID) (sqlc.SellerProfileMetadatum, error)
+
+	// 🗂️ Fetch category by ID to validate leaf + archived status
+	GetCategoryByID(ctx context.Context, categoryID uuid.UUID) (sqlc.Category, error)
+
+	// 🖼️ Insert image/video into product_medias
+	InsertProductMedia(ctx context.Context, arg sqlc.InsertProductMediaParams) (uuid.UUID, error)
 }

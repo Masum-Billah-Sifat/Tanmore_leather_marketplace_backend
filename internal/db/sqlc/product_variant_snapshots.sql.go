@@ -7,9 +7,183 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
+	"time"
 
 	"github.com/google/uuid"
 )
+
+const applyRetailDiscountToSnapshot = `-- name: ApplyRetailDiscountToSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    hasretaildiscount = $1,
+    retaildiscount = $2,
+    retaildiscounttype = $3,
+    updatedat = $4
+WHERE productid = $5
+  AND variantid = $6
+`
+
+type ApplyRetailDiscountToSnapshotParams struct {
+	HasRetailDiscount  bool           `json:"has_retail_discount"`
+	RetailDiscount     sql.NullInt64  `json:"retail_discount"`
+	RetailDiscountType sql.NullString `json:"retail_discount_type"`
+	Updatedat          time.Time      `json:"updatedat"`
+	Productid          uuid.UUID      `json:"productid"`
+	Variantid          uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) ApplyRetailDiscountToSnapshot(ctx context.Context, arg ApplyRetailDiscountToSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, applyRetailDiscountToSnapshot,
+		arg.HasRetailDiscount,
+		arg.RetailDiscount,
+		arg.RetailDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const applyWholesaleDiscountToSnapshot = `-- name: ApplyWholesaleDiscountToSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    haswholesalediscount = $1,
+    wholesalediscount = $2,
+    wholesalediscounttype = $3,
+    updatedat = $4
+WHERE productid = $5
+  AND variantid = $6
+`
+
+type ApplyWholesaleDiscountToSnapshotParams struct {
+	HasWholesaleDiscount  bool           `json:"has_wholesale_discount"`
+	WholesaleDiscount     sql.NullInt64  `json:"wholesale_discount"`
+	WholesaleDiscountType sql.NullString `json:"wholesale_discount_type"`
+	Updatedat             time.Time      `json:"updatedat"`
+	Productid             uuid.UUID      `json:"productid"`
+	Variantid             uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) ApplyWholesaleDiscountToSnapshot(ctx context.Context, arg ApplyWholesaleDiscountToSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, applyWholesaleDiscountToSnapshot,
+		arg.HasWholesaleDiscount,
+		arg.WholesaleDiscount,
+		arg.WholesaleDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const archiveVariantInSnapshots = `-- name: ArchiveVariantInSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    isvariantarchived = $1,
+    updatedat = $2
+WHERE productid = $3
+  AND variantid = $4
+`
+
+type ArchiveVariantInSnapshotsParams struct {
+	Isvariantarchived bool      `json:"isvariantarchived"`
+	Updatedat         time.Time `json:"updatedat"`
+	Productid         uuid.UUID `json:"productid"`
+	Variantid         uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) ArchiveVariantInSnapshots(ctx context.Context, arg ArchiveVariantInSnapshotsParams) error {
+	_, err := q.db.ExecContext(ctx, archiveVariantInSnapshots,
+		arg.Isvariantarchived,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const disableWholesaleModeInSnapshots = `-- name: DisableWholesaleModeInSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    haswholesaleenabled = $1,
+    haswholesalediscount = $2,
+    wholesaleprice = $3,
+    wholesaleminquantity = $4,
+    wholesalediscount = $5,
+    wholesalediscounttype = $6,
+    updatedat = $7
+WHERE productid = $8
+  AND variantid = $9
+`
+
+type DisableWholesaleModeInSnapshotsParams struct {
+	HasWholesaleEnabled   bool           `json:"has_wholesale_enabled"`
+	HasWholesaleDiscount  bool           `json:"has_wholesale_discount"`
+	WholesalePrice        sql.NullInt64  `json:"wholesale_price"`
+	WholesaleMinQuantity  sql.NullInt32  `json:"wholesale_min_quantity"`
+	WholesaleDiscount     sql.NullInt64  `json:"wholesale_discount"`
+	WholesaleDiscountType sql.NullString `json:"wholesale_discount_type"`
+	Updatedat             time.Time      `json:"updatedat"`
+	Productid             uuid.UUID      `json:"productid"`
+	Variantid             uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) DisableWholesaleModeInSnapshots(ctx context.Context, arg DisableWholesaleModeInSnapshotsParams) error {
+	_, err := q.db.ExecContext(ctx, disableWholesaleModeInSnapshots,
+		arg.HasWholesaleEnabled,
+		arg.HasWholesaleDiscount,
+		arg.WholesalePrice,
+		arg.WholesaleMinQuantity,
+		arg.WholesaleDiscount,
+		arg.WholesaleDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const enableWholesaleModeInSnapshots = `-- name: EnableWholesaleModeInSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    wholesaleprice = $1,
+    wholesaleminquantity = $2,
+    haswholesalediscount = $3,
+    wholesalediscount = COALESCE($4::BIGINT, NULL),
+    wholesalediscounttype = COALESCE($5::TEXT, NULL),
+    haswholesaleenabled = $6,
+    updatedat = $7
+WHERE productid = $8
+  AND variantid = $9
+`
+
+type EnableWholesaleModeInSnapshotsParams struct {
+	WholesalePrice        sql.NullInt64  `json:"wholesale_price"`
+	MinQtyWholesale       sql.NullInt32  `json:"min_qty_wholesale"`
+	HasWholesaleDiscount  bool           `json:"has_wholesale_discount"`
+	WholesaleDiscount     sql.NullInt64  `json:"wholesale_discount"`
+	WholesaleDiscountType sql.NullString `json:"wholesale_discount_type"`
+	HasWholesaleEnabled   bool           `json:"has_wholesale_enabled"`
+	Updatedat             time.Time      `json:"updatedat"`
+	Productid             uuid.UUID      `json:"productid"`
+	Variantid             uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) EnableWholesaleModeInSnapshots(ctx context.Context, arg EnableWholesaleModeInSnapshotsParams) error {
+	_, err := q.db.ExecContext(ctx, enableWholesaleModeInSnapshots,
+		arg.WholesalePrice,
+		arg.MinQtyWholesale,
+		arg.HasWholesaleDiscount,
+		arg.WholesaleDiscount,
+		arg.WholesaleDiscountType,
+		arg.HasWholesaleEnabled,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
 
 const getVariantSnapshot = `-- name: GetVariantSnapshot :one
 SELECT
@@ -114,4 +288,704 @@ func (q *Queries) GetVariantSnapshot(ctx context.Context, arg GetVariantSnapshot
 		&i.Updatedat,
 	)
 	return i, err
+}
+
+const getVariantSnapshotByProductIDAndVariantID = `-- name: GetVariantSnapshotByProductIDAndVariantID :one
+SELECT
+    id,
+
+    -- Category info
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    -- Seller info
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    -- Product info
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl,
+
+    -- Variant info
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    -- Retail discount (optional)
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    -- Wholesale (optional)
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    -- Weight and timestamps
+    weight_grams,
+    createdat,
+    updatedat
+
+FROM product_variant_snapshots
+WHERE productid = $1 AND variantid = $2
+`
+
+type GetVariantSnapshotByProductIDAndVariantIDParams struct {
+	Productid uuid.UUID `json:"productid"`
+	Variantid uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) GetVariantSnapshotByProductIDAndVariantID(ctx context.Context, arg GetVariantSnapshotByProductIDAndVariantIDParams) (ProductVariantSnapshot, error) {
+	row := q.db.QueryRowContext(ctx, getVariantSnapshotByProductIDAndVariantID, arg.Productid, arg.Variantid)
+	var i ProductVariantSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.Categoryid,
+		&i.Iscategoryarchived,
+		&i.Categoryname,
+		&i.Sellerid,
+		&i.Issellerapproved,
+		&i.Issellerarchived,
+		&i.Issellerbanned,
+		&i.Sellerstorename,
+		&i.Productid,
+		&i.Isproductapproved,
+		&i.Isproductarchived,
+		&i.Isproductbanned,
+		&i.Producttitle,
+		&i.Productdescription,
+		&i.Productprimaryimageurl,
+		&i.Variantid,
+		&i.Isvariantarchived,
+		&i.Isvariantinstock,
+		&i.Stockamount,
+		&i.Color,
+		&i.Size,
+		&i.Retailprice,
+		&i.Hasretaildiscount,
+		&i.Retaildiscounttype,
+		&i.Retaildiscount,
+		&i.Haswholesaleenabled,
+		&i.Wholesaleprice,
+		&i.Wholesaleminquantity,
+		&i.Haswholesalediscount,
+		&i.Wholesalediscounttype,
+		&i.Wholesalediscount,
+		&i.WeightGrams,
+		&i.Createdat,
+		&i.Updatedat,
+	)
+	return i, err
+}
+
+const getVariantSnapshotByVariantID = `-- name: GetVariantSnapshotByVariantID :one
+SELECT
+    id,
+
+    -- Category info
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    -- Seller info
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    -- Product info
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl,
+
+    -- Variant info
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    -- Retail discount (optional)
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    -- Wholesale (optional)
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    -- Weight and timestamps
+    weight_grams,
+    createdat,
+    updatedat
+
+FROM product_variant_snapshots
+WHERE variantid = $1
+`
+
+func (q *Queries) GetVariantSnapshotByVariantID(ctx context.Context, variantid uuid.UUID) (ProductVariantSnapshot, error) {
+	row := q.db.QueryRowContext(ctx, getVariantSnapshotByVariantID, variantid)
+	var i ProductVariantSnapshot
+	err := row.Scan(
+		&i.ID,
+		&i.Categoryid,
+		&i.Iscategoryarchived,
+		&i.Categoryname,
+		&i.Sellerid,
+		&i.Issellerapproved,
+		&i.Issellerarchived,
+		&i.Issellerbanned,
+		&i.Sellerstorename,
+		&i.Productid,
+		&i.Isproductapproved,
+		&i.Isproductarchived,
+		&i.Isproductbanned,
+		&i.Producttitle,
+		&i.Productdescription,
+		&i.Productprimaryimageurl,
+		&i.Variantid,
+		&i.Isvariantarchived,
+		&i.Isvariantinstock,
+		&i.Stockamount,
+		&i.Color,
+		&i.Size,
+		&i.Retailprice,
+		&i.Hasretaildiscount,
+		&i.Retaildiscounttype,
+		&i.Retaildiscount,
+		&i.Haswholesaleenabled,
+		&i.Wholesaleprice,
+		&i.Wholesaleminquantity,
+		&i.Haswholesalediscount,
+		&i.Wholesalediscounttype,
+		&i.Wholesalediscount,
+		&i.WeightGrams,
+		&i.Createdat,
+		&i.Updatedat,
+	)
+	return i, err
+}
+
+const insertProductVariantSnapshot = `-- name: InsertProductVariantSnapshot :exec
+INSERT INTO product_variant_snapshots (
+    id,
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl,
+
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    weight_grams,
+    createdat,
+    updatedat
+)
+VALUES (
+    $1,  -- id
+    $2,  -- categoryid
+    $3,  -- iscategoryarchived
+    $4,  -- categoryname
+
+    $5,  -- sellerid
+    $6,  -- issellerapproved
+    $7,  -- issellerarchived
+    $8,  -- issellerbanned
+    $9,  -- sellerstorename
+
+    $10, -- productid
+    $11, -- isproductapproved
+    $12, -- isproductarchived
+    $13, -- isproductbanned
+    $14, -- producttitle
+    $15, -- productdescription
+    $16, -- productprimaryimageurl
+
+    $17, -- variantid
+    $18, -- isvariantarchived
+    $19, -- isvariantinstock
+    $20, -- stockamount
+    $21, -- color
+    $22, -- size
+    $23, -- retailprice
+
+    $24, -- hasretaildiscount
+    $25, -- retaildiscounttype
+    $26, -- retaildiscount
+
+    $27, -- haswholesaleenabled
+    $28, -- wholesaleprice
+    $29, -- wholesaleminquantity
+    $30, -- haswholesalediscount
+    $31, -- wholesalediscounttype
+    $32, -- wholesalediscount
+
+    $33, -- weight_grams
+    $34, -- createdat
+    $35  -- updatedat
+)
+`
+
+type InsertProductVariantSnapshotParams struct {
+	ID                     uuid.UUID      `json:"id"`
+	Categoryid             uuid.UUID      `json:"categoryid"`
+	Iscategoryarchived     bool           `json:"iscategoryarchived"`
+	Categoryname           string         `json:"categoryname"`
+	Sellerid               uuid.UUID      `json:"sellerid"`
+	Issellerapproved       bool           `json:"issellerapproved"`
+	Issellerarchived       bool           `json:"issellerarchived"`
+	Issellerbanned         bool           `json:"issellerbanned"`
+	Sellerstorename        string         `json:"sellerstorename"`
+	Productid              uuid.UUID      `json:"productid"`
+	Isproductapproved      bool           `json:"isproductapproved"`
+	Isproductarchived      bool           `json:"isproductarchived"`
+	Isproductbanned        bool           `json:"isproductbanned"`
+	Producttitle           string         `json:"producttitle"`
+	Productdescription     string         `json:"productdescription"`
+	Productprimaryimageurl string         `json:"productprimaryimageurl"`
+	Variantid              uuid.UUID      `json:"variantid"`
+	Isvariantarchived      bool           `json:"isvariantarchived"`
+	Isvariantinstock       bool           `json:"isvariantinstock"`
+	Stockamount            int32          `json:"stockamount"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	Retailprice            int64          `json:"retailprice"`
+	Hasretaildiscount      bool           `json:"hasretaildiscount"`
+	Retaildiscounttype     sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount         sql.NullInt64  `json:"retaildiscount"`
+	Haswholesaleenabled    bool           `json:"haswholesaleenabled"`
+	Wholesaleprice         sql.NullInt64  `json:"wholesaleprice"`
+	Wholesaleminquantity   sql.NullInt32  `json:"wholesaleminquantity"`
+	Haswholesalediscount   bool           `json:"haswholesalediscount"`
+	Wholesalediscounttype  sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount      sql.NullInt64  `json:"wholesalediscount"`
+	WeightGrams            int32          `json:"weight_grams"`
+	Createdat              time.Time      `json:"createdat"`
+	Updatedat              time.Time      `json:"updatedat"`
+}
+
+func (q *Queries) InsertProductVariantSnapshot(ctx context.Context, arg InsertProductVariantSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, insertProductVariantSnapshot,
+		arg.ID,
+		arg.Categoryid,
+		arg.Iscategoryarchived,
+		arg.Categoryname,
+		arg.Sellerid,
+		arg.Issellerapproved,
+		arg.Issellerarchived,
+		arg.Issellerbanned,
+		arg.Sellerstorename,
+		arg.Productid,
+		arg.Isproductapproved,
+		arg.Isproductarchived,
+		arg.Isproductbanned,
+		arg.Producttitle,
+		arg.Productdescription,
+		arg.Productprimaryimageurl,
+		arg.Variantid,
+		arg.Isvariantarchived,
+		arg.Isvariantinstock,
+		arg.Stockamount,
+		arg.Color,
+		arg.Size,
+		arg.Retailprice,
+		arg.Hasretaildiscount,
+		arg.Retaildiscounttype,
+		arg.Retaildiscount,
+		arg.Haswholesaleenabled,
+		arg.Wholesaleprice,
+		arg.Wholesaleminquantity,
+		arg.Haswholesalediscount,
+		arg.Wholesalediscounttype,
+		arg.Wholesalediscount,
+		arg.WeightGrams,
+		arg.Createdat,
+		arg.Updatedat,
+	)
+	return err
+}
+
+const removeRetailDiscountFromSnapshot = `-- name: RemoveRetailDiscountFromSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    hasretaildiscount = $1,
+    retaildiscount = $2,
+    retaildiscounttype = $3,
+    updatedat = $4
+WHERE productid = $5
+  AND variantid = $6
+`
+
+type RemoveRetailDiscountFromSnapshotParams struct {
+	HasRetailDiscount  bool           `json:"has_retail_discount"`
+	RetailDiscount     sql.NullInt64  `json:"retail_discount"`
+	RetailDiscountType sql.NullString `json:"retail_discount_type"`
+	Updatedat          time.Time      `json:"updatedat"`
+	Productid          uuid.UUID      `json:"productid"`
+	Variantid          uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) RemoveRetailDiscountFromSnapshot(ctx context.Context, arg RemoveRetailDiscountFromSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, removeRetailDiscountFromSnapshot,
+		arg.HasRetailDiscount,
+		arg.RetailDiscount,
+		arg.RetailDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const removeWholesaleDiscountFromSnapshot = `-- name: RemoveWholesaleDiscountFromSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    haswholesalediscount = $1,
+    wholesalediscount = $2,
+    wholesalediscounttype = $3,
+    updatedat = $4
+WHERE productid = $5
+  AND variantid = $6
+`
+
+type RemoveWholesaleDiscountFromSnapshotParams struct {
+	HasWholesaleDiscount  bool           `json:"has_wholesale_discount"`
+	WholesaleDiscount     sql.NullInt64  `json:"wholesale_discount"`
+	WholesaleDiscountType sql.NullString `json:"wholesale_discount_type"`
+	Updatedat             time.Time      `json:"updatedat"`
+	Productid             uuid.UUID      `json:"productid"`
+	Variantid             uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) RemoveWholesaleDiscountFromSnapshot(ctx context.Context, arg RemoveWholesaleDiscountFromSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, removeWholesaleDiscountFromSnapshot,
+		arg.HasWholesaleDiscount,
+		arg.WholesaleDiscount,
+		arg.WholesaleDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateRetailDiscountInSnapshot = `-- name: UpdateRetailDiscountInSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    retaildiscount = COALESCE($1::BIGINT, retaildiscount),
+    retaildiscounttype = COALESCE($2::TEXT, retaildiscounttype),
+    updatedat = $3
+WHERE productid = $4
+  AND variantid = $5
+`
+
+type UpdateRetailDiscountInSnapshotParams struct {
+	RetailDiscount     sql.NullInt64  `json:"retail_discount"`
+	RetailDiscountType sql.NullString `json:"retail_discount_type"`
+	Updatedat          time.Time      `json:"updatedat"`
+	Productid          uuid.UUID      `json:"productid"`
+	Variantid          uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) UpdateRetailDiscountInSnapshot(ctx context.Context, arg UpdateRetailDiscountInSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, updateRetailDiscountInSnapshot,
+		arg.RetailDiscount,
+		arg.RetailDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateSnapshotOnInStockUpdate = `-- name: UpdateSnapshotOnInStockUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    isvariantinstock = $1,
+    updatedat = $2
+WHERE productid = $3
+  AND variantid = $4
+`
+
+type UpdateSnapshotOnInStockUpdateParams struct {
+	InStock   bool      `json:"in_stock"`
+	Updatedat time.Time `json:"updatedat"`
+	Productid uuid.UUID `json:"productid"`
+	Variantid uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) UpdateSnapshotOnInStockUpdate(ctx context.Context, arg UpdateSnapshotOnInStockUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotOnInStockUpdate,
+		arg.InStock,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateSnapshotOnRetailPriceUpdate = `-- name: UpdateSnapshotOnRetailPriceUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    retailprice = $1,
+    updatedat = $2
+WHERE productid = $3
+  AND variantid = $4
+`
+
+type UpdateSnapshotOnRetailPriceUpdateParams struct {
+	RetailPrice int64     `json:"retail_price"`
+	Updatedat   time.Time `json:"updatedat"`
+	Productid   uuid.UUID `json:"productid"`
+	Variantid   uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) UpdateSnapshotOnRetailPriceUpdate(ctx context.Context, arg UpdateSnapshotOnRetailPriceUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotOnRetailPriceUpdate,
+		arg.RetailPrice,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateSnapshotOnStockQuantityUpdate = `-- name: UpdateSnapshotOnStockQuantityUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    stockamount = $1,
+    updatedat = $2
+WHERE productid = $3
+  AND variantid = $4
+`
+
+type UpdateSnapshotOnStockQuantityUpdateParams struct {
+	StockQuantity int32     `json:"stock_quantity"`
+	Updatedat     time.Time `json:"updatedat"`
+	Productid     uuid.UUID `json:"productid"`
+	Variantid     uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) UpdateSnapshotOnStockQuantityUpdate(ctx context.Context, arg UpdateSnapshotOnStockQuantityUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotOnStockQuantityUpdate,
+		arg.StockQuantity,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateSnapshotOnVariantInfoUpdate = `-- name: UpdateSnapshotOnVariantInfoUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    color = COALESCE($1::TEXT, color),
+    size = COALESCE($2::TEXT, size),
+    updatedat = $3
+WHERE variantid = $4
+  AND productid = $5
+`
+
+type UpdateSnapshotOnVariantInfoUpdateParams struct {
+	Color     sql.NullString `json:"color"`
+	Size      sql.NullString `json:"size"`
+	Updatedat time.Time      `json:"updatedat"`
+	Variantid uuid.UUID      `json:"variantid"`
+	Productid uuid.UUID      `json:"productid"`
+}
+
+func (q *Queries) UpdateSnapshotOnVariantInfoUpdate(ctx context.Context, arg UpdateSnapshotOnVariantInfoUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotOnVariantInfoUpdate,
+		arg.Color,
+		arg.Size,
+		arg.Updatedat,
+		arg.Variantid,
+		arg.Productid,
+	)
+	return err
+}
+
+const updateSnapshotOnWeightUpdate = `-- name: UpdateSnapshotOnWeightUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    weight_grams = $1,
+    updatedat = $2
+WHERE productid = $3
+  AND variantid = $4
+`
+
+type UpdateSnapshotOnWeightUpdateParams struct {
+	WeightGrams int32     `json:"weight_grams"`
+	Updatedat   time.Time `json:"updatedat"`
+	Productid   uuid.UUID `json:"productid"`
+	Variantid   uuid.UUID `json:"variantid"`
+}
+
+func (q *Queries) UpdateSnapshotOnWeightUpdate(ctx context.Context, arg UpdateSnapshotOnWeightUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotOnWeightUpdate,
+		arg.WeightGrams,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateSnapshotPrimaryImageURL = `-- name: UpdateSnapshotPrimaryImageURL :exec
+UPDATE product_variant_snapshots
+SET
+    productprimaryimageurl = $1,
+    updatedat = $2
+WHERE productid = $3
+`
+
+type UpdateSnapshotPrimaryImageURLParams struct {
+	MediaUrl  string    `json:"media_url"`
+	Updatedat time.Time `json:"updatedat"`
+	Productid uuid.UUID `json:"productid"`
+}
+
+func (q *Queries) UpdateSnapshotPrimaryImageURL(ctx context.Context, arg UpdateSnapshotPrimaryImageURLParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotPrimaryImageURL, arg.MediaUrl, arg.Updatedat, arg.Productid)
+	return err
+}
+
+const updateSnapshotsOnProductInfoUpdate = `-- name: UpdateSnapshotsOnProductInfoUpdate :exec
+UPDATE product_variant_snapshots
+SET
+    producttitle = COALESCE($1::TEXT, producttitle),
+    productdescription = COALESCE($2::TEXT, productdescription),
+    updatedat = $3
+WHERE productid = $4
+`
+
+type UpdateSnapshotsOnProductInfoUpdateParams struct {
+	Producttitle       sql.NullString `json:"producttitle"`
+	Productdescription sql.NullString `json:"productdescription"`
+	Updatedat          time.Time      `json:"updatedat"`
+	Productid          uuid.UUID      `json:"productid"`
+}
+
+func (q *Queries) UpdateSnapshotsOnProductInfoUpdate(ctx context.Context, arg UpdateSnapshotsOnProductInfoUpdateParams) error {
+	_, err := q.db.ExecContext(ctx, updateSnapshotsOnProductInfoUpdate,
+		arg.Producttitle,
+		arg.Productdescription,
+		arg.Updatedat,
+		arg.Productid,
+	)
+	return err
+}
+
+const updateWholesaleDiscountInSnapshot = `-- name: UpdateWholesaleDiscountInSnapshot :exec
+UPDATE product_variant_snapshots
+SET
+    wholesalediscount = COALESCE($1::BIGINT, wholesalediscount),
+    wholesalediscounttype = COALESCE($2::TEXT, wholesalediscounttype),
+    updatedat = $3
+WHERE productid = $4
+  AND variantid = $5
+`
+
+type UpdateWholesaleDiscountInSnapshotParams struct {
+	WholesaleDiscount     sql.NullInt64  `json:"wholesale_discount"`
+	WholesaleDiscountType sql.NullString `json:"wholesale_discount_type"`
+	Updatedat             time.Time      `json:"updatedat"`
+	Productid             uuid.UUID      `json:"productid"`
+	Variantid             uuid.UUID      `json:"variantid"`
+}
+
+func (q *Queries) UpdateWholesaleDiscountInSnapshot(ctx context.Context, arg UpdateWholesaleDiscountInSnapshotParams) error {
+	_, err := q.db.ExecContext(ctx, updateWholesaleDiscountInSnapshot,
+		arg.WholesaleDiscount,
+		arg.WholesaleDiscountType,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
+}
+
+const updateWholesaleModeInSnapshots = `-- name: UpdateWholesaleModeInSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    wholesaleprice = COALESCE($1::BIGINT, wholesaleprice),
+    wholesaleminquantity = COALESCE($2::INT, wholesaleminquantity),
+    updatedat = $3
+WHERE productid = $4
+  AND variantid = $5
+`
+
+type UpdateWholesaleModeInSnapshotsParams struct {
+	WholesalePrice  sql.NullInt64 `json:"wholesale_price"`
+	MinQtyWholesale sql.NullInt32 `json:"min_qty_wholesale"`
+	Updatedat       time.Time     `json:"updatedat"`
+	Productid       uuid.UUID     `json:"productid"`
+	Variantid       uuid.UUID     `json:"variantid"`
+}
+
+func (q *Queries) UpdateWholesaleModeInSnapshots(ctx context.Context, arg UpdateWholesaleModeInSnapshotsParams) error {
+	_, err := q.db.ExecContext(ctx, updateWholesaleModeInSnapshots,
+		arg.WholesalePrice,
+		arg.MinQtyWholesale,
+		arg.Updatedat,
+		arg.Productid,
+		arg.Variantid,
+	)
+	return err
 }

@@ -1,6 +1,8 @@
 package errors
 
-import "fmt"
+import (
+	"fmt"
+)
 
 // 🔎 Validation error (missing fields, invalid types, etc.)
 func NewValidationError(field string, message string) error {

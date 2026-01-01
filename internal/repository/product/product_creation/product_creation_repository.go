@@ -73,3 +73,27 @@ func (r *ProductRepository) InsertEvent(
 ) error {
 	return r.q.InsertEvent(ctx, arg)
 }
+
+// 🧠 Fetch seller profile metadata (used in event payload)
+func (r *ProductRepository) GetSellerProfileMetadataBySellerID(
+	ctx context.Context,
+	sellerID uuid.UUID,
+) (sqlc.SellerProfileMetadatum, error) {
+	return r.q.GetSellerProfileMetadataBySellerID(ctx, sellerID)
+}
+
+// 🗂️ Fetch category by ID (for validation)
+func (r *ProductRepository) GetCategoryByID(
+	ctx context.Context,
+	categoryID uuid.UUID,
+) (sqlc.Category, error) {
+	return r.q.GetCategoryByID(ctx, categoryID)
+}
+
+// 🖼️ Insert media into product_medias (image/video)
+func (r *ProductRepository) InsertProductMedia(
+	ctx context.Context,
+	arg sqlc.InsertProductMediaParams,
+) (uuid.UUID, error) {
+	return r.q.InsertProductMedia(ctx, arg)
+}

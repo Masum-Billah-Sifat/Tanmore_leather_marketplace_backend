@@ -60,6 +60,118 @@ import (
 
 	repo_variant_remove_wholesale_discount "tanmore_backend/internal/repository/product/product_variant/product_variant_disable_wholesale_discount"
 
+	// Feed or Search endpoint (public)
+	feed_search_handlers "tanmore_backend/internal/api/http/handlers/feed_query"
+	repo_feed_search "tanmore_backend/internal/repository/product/product_variant/product_variant_index_feed_or_search"
+	feed_search_services "tanmore_backend/internal/services/product/product_variant/product_variant_index_feed_or_search"
+
+	// ✅ Seller profile creation
+	seller_profile_handlers "tanmore_backend/internal/api/http/handlers/seller_profile"
+	repo_seller_profile "tanmore_backend/internal/repository/seller_profile/seller_profile_metadata"
+	seller_profile_services "tanmore_backend/internal/services/seller_profile"
+
+	// 🆕 Update Product Info
+	update_product_info_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_update_product_info "tanmore_backend/internal/repository/product/product_update_info"
+	update_product_info_services "tanmore_backend/internal/services/product"
+
+	// 🆕 Add Product Media
+	add_media_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_add_media "tanmore_backend/internal/repository/product/product_add_media"
+	add_media_services "tanmore_backend/internal/services/product"
+
+	// 🔽 Add below existing product imports
+	archive_media_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_archive_media "tanmore_backend/internal/repository/product/product_archive_media"
+	archive_media_services "tanmore_backend/internal/services/product"
+
+	// 🖼️ Set Primary Image
+	set_primary_image_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_set_primary_image "tanmore_backend/internal/repository/product/product_set_primary_image"
+	set_primary_image_services "tanmore_backend/internal/services/product"
+
+	cart_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	cart_repo "tanmore_backend/internal/repository/cart/add_to_cart"
+	cart_services "tanmore_backend/internal/services/cart"
+
+	// 🛒 Update Cart Quantity
+	update_quantity_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	update_quantity_repo "tanmore_backend/internal/repository/cart/update_to_cart"
+	update_quantity_service "tanmore_backend/internal/services/cart"
+
+	// 🛒 Remove Cart Item
+	remove_cart_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	remove_cart_repo "tanmore_backend/internal/repository/cart/remove_from_cart"
+	remove_cart_service "tanmore_backend/internal/services/cart"
+
+	// 🧹 Clear Cart Items
+	clear_cart_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	clear_cart_repo "tanmore_backend/internal/repository/cart/clear_cart"
+	clear_cart_service "tanmore_backend/internal/services/cart"
+
+	get_all_cart_items_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	get_all_cart_items_repo "tanmore_backend/internal/repository/cart/get_all_cart_items"
+	get_all_cart_items_service "tanmore_backend/internal/services/cart"
+
+	cart_summary_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	cart_summary_repo "tanmore_backend/internal/repository/cart/cart_summary"
+	cart_summary_service "tanmore_backend/internal/services/cart"
+
+	// 🧾 Checkout Endpoint
+	checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	checkout_repo "tanmore_backend/internal/repository/checkout"
+	checkout_services "tanmore_backend/internal/services/checkout"
+
+	// 🧭 Category Tree
+	category_tree_handlers "tanmore_backend/internal/api/http/handlers/category"
+	category_tree_repo "tanmore_backend/internal/repository/category/category_tree"
+	category_tree_services "tanmore_backend/internal/services/category"
+
+	// 🛍️ Fetch products by category
+	fetch_by_category_handlers "tanmore_backend/internal/api/http/handlers/product"
+	fetch_by_category_repo "tanmore_backend/internal/repository/product/fetch_by_category"
+	fetch_by_category_service "tanmore_backend/internal/services/product"
+
+	// 🧹 Archive product
+	archive_product_handlers "tanmore_backend/internal/api/http/handlers/product"
+	archive_product_repo "tanmore_backend/internal/repository/product/product_archive"
+	archive_product_services "tanmore_backend/internal/services/product"
+
+	// Product Review endpoint
+	review_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_add_review "tanmore_backend/internal/repository/product/product_add_review"
+	review_services "tanmore_backend/internal/services/product"
+
+	// ✏️ Edit Review
+	edit_review_handler "tanmore_backend/internal/api/http/handlers/product"
+	repo_edit_review "tanmore_backend/internal/repository/product/product_edit_review"
+	edit_review_service "tanmore_backend/internal/services/product"
+
+	// Archive Review
+	archive_review_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_archive_review "tanmore_backend/internal/repository/product/product_archive_review"
+	archive_review_services "tanmore_backend/internal/services/product"
+
+	// 🗨️ Reply to Review
+	handler_reply_review "tanmore_backend/internal/api/http/handlers/product"
+	repo_reply_review "tanmore_backend/internal/repository/product/product_reply_review"
+	service_reply_review "tanmore_backend/internal/services/product"
+
+	// ✏️ Edit Review Reply (Seller)
+	edit_review_reply_handler "tanmore_backend/internal/api/http/handlers/product"
+	repo_edit_review_reply "tanmore_backend/internal/repository/product/product_review_reply_edit"
+	edit_review_reply_service "tanmore_backend/internal/services/product"
+
+	// 🗑️ Archive Review Reply (Seller Only)
+	archive_reply_handler "tanmore_backend/internal/api/http/handlers/product"
+	archive_reply_repo "tanmore_backend/internal/repository/product/product_review_reply_archive"
+	archive_reply_service "tanmore_backend/internal/services/product"
+
+	// Reviews: Get All Product Reviews with Replies
+	reviews_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_get_reviews "tanmore_backend/internal/repository/product/product_get_all_reviews"
+	reviews_services "tanmore_backend/internal/services/product"
+
 	"tanmore_backend/pkg/token"
 )
 
@@ -227,6 +339,171 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	})
 	removeWholesaleDiscountHandler := variant_handlers.NewRemoveVariantWholesaleDiscountHandler(removeWholesaleDiscountService)
 
+	// 🔍 Public Feed/Search Endpoint Setup
+	feedSearchRepo := repo_feed_search.NewProductVariantIndexFeedOrSearchRepository(db)
+	feedSearchService := feed_search_services.NewFeedQueryService(feedSearchRepo)
+	feedSearchHandler := feed_search_handlers.NewFeedQueryHandler(feedSearchService)
+
+	// 🧾 Seller Profile Metadata Setup
+	sellerProfileRepo := repo_seller_profile.NewSellerProfileMetadataRepository(db)
+	sellerProfileService := seller_profile_services.NewCreateSellerProfileService(seller_profile_services.CreateSellerProfileServiceDeps{
+		Repo: sellerProfileRepo,
+	})
+	sellerProfileHandler := seller_profile_handlers.NewCreateSellerProfileHandler(sellerProfileService)
+
+	// 🆕 Update Product Info Setup
+	productUpdateRepo := repo_update_product_info.NewProductUpdateInfoRepository(db)
+	updateProductInfoService := update_product_info_services.NewUpdateProductInfoService(update_product_info_services.UpdateProductInfoServiceDeps{
+		Repo: productUpdateRepo,
+	})
+	updateProductInfoHandler := update_product_info_handlers.NewUpdateProductInfoHandler(updateProductInfoService)
+
+	// 🆕 Add Product Media Setup
+	productMediaRepo := repo_add_media.NewProductAddMediaRepository(db)
+	addProductMediaService := add_media_services.NewAddProductMediaService(add_media_services.AddProductMediaServiceDeps{
+		Repo: productMediaRepo,
+	})
+	addProductMediaHandler := add_media_handlers.NewAddProductMediaHandler(addProductMediaService)
+
+	// 🏗️ Archive Media - DELETE /api/seller/products/:product_id/media/:media_id
+	archiveMediaRepo := repo_archive_media.NewProductArchiveMediaRepository(db)
+	archiveMediaService := archive_media_services.NewArchiveProductMediaService(archive_media_services.ArchiveProductMediaServiceDeps{
+		Repo: archiveMediaRepo,
+	})
+	archiveMediaHandler := archive_media_handlers.NewArchiveProductMediaHandler(archiveMediaService)
+
+	// 🖼️ Set Primary Image
+	setPrimaryImageRepo := repo_set_primary_image.NewProductSetPrimaryImageRepository(db)
+	setPrimaryImageService := set_primary_image_services.NewSetPrimaryImageService(set_primary_image_services.SetPrimaryImageServiceDeps{
+		Repo: setPrimaryImageRepo,
+	})
+	setPrimaryImageHandler := set_primary_image_handlers.NewSetPrimaryImageHandler(setPrimaryImageService)
+
+	// ------------------------------------------------------------
+	// 🛒 Add to Cart endpoint wiring
+	cartRepo := cart_repo.NewAddToCartRepository(db)
+	addToCartService := cart_services.NewAddToCartService(cart_services.AddToCartServiceDeps{
+		Repo: cartRepo,
+	})
+	addToCartHandler := cart_handlers.NewAddToCartHandler(addToCartService)
+
+	// ------------------------------------------------------------
+	// 🛒 Update Cart Quantity Endpoint Wiring
+
+	updateCartQuantityRepo := update_quantity_repo.NewUpdateCartQuantityRepository(db)
+	updateCartQuantityService := update_quantity_service.NewUpdateCartQuantityService(update_quantity_service.UpdateCartQuantityServiceDeps{
+		Repo: updateCartQuantityRepo,
+	})
+	updateCartQuantityHandler := update_quantity_handlers.NewUpdateCartQuantityHandler(updateCartQuantityService)
+
+	// ------------------------------------------------------------
+	// 🗑️ Remove Cart Item Endpoint Wiring
+	removeCartRepo := remove_cart_repo.NewRemoveFromCartRepository(db)
+	removeCartService := remove_cart_service.NewRemoveCartItemService(remove_cart_service.RemoveCartItemServiceDeps{
+		Repo: removeCartRepo,
+	})
+	removeCartHandler := remove_cart_handlers.NewRemoveCartItemHandler(removeCartService)
+
+	// ------------------------------------------------------------
+	// 🧹 Clear Cart Endpoint Wiring
+	clearCartRepo := clear_cart_repo.NewClearCartRepository(db)
+	clearCartService := clear_cart_service.NewClearCartService(clear_cart_service.ClearCartServiceDeps{
+		Repo: clearCartRepo,
+	})
+	clearCartHandler := clear_cart_handlers.NewClearCartHandler(clearCartService)
+
+	// 🛒 Get All Cart Items Endpoint Wiring
+	getAllCartItemsRepo := get_all_cart_items_repo.NewGetAllCartItemsRepository(db)
+	getAllCartItemsService := get_all_cart_items_service.NewGetAllCartItemsService(get_all_cart_items_service.GetAllCartItemsServiceDeps{
+		Repo: getAllCartItemsRepo,
+	})
+	getAllCartItemsHandler := get_all_cart_items_handlers.NewGetAllCartItemsHandler(getAllCartItemsService)
+
+	// 🧮 Cart Summary Endpoint Wiring
+	cartSummaryRepo := cart_summary_repo.NewCartSummaryRepository(db)
+	cartSummaryService := cart_summary_service.NewCartSummaryService(cart_summary_service.CartSummaryServiceDeps{
+		Repo: cartSummaryRepo,
+	})
+	cartSummaryHandler := cart_summary_handlers.NewCartSummaryHandler(cartSummaryService)
+
+	// 🧾 Checkout Endpoint Setup
+	checkoutRepo := checkout_repo.NewCheckoutRepository(db)
+	checkoutService := checkout_services.NewCheckoutService(checkout_services.CheckoutServiceDeps{
+		Repo: checkoutRepo,
+	})
+	checkoutHandler := checkout_handlers.NewCheckoutHandler(checkoutService)
+
+	// 🧭 Category Tree Setup
+	categoryTreeRepo := category_tree_repo.NewCategoryTreeRepository(db)
+	categoryTreeService := category_tree_services.NewGetCategoryTreeService(category_tree_services.GetCategoryTreeServiceDeps{
+		Repo: categoryTreeRepo,
+	})
+	categoryTreeHandler := category_tree_handlers.NewGetCategoryTreeHandler(categoryTreeService)
+
+	// 🛍️ Fetch Products by Category Setup
+	fetchByCategoryRepo := fetch_by_category_repo.NewFetchByCategoryRepository(db)
+	fetchByCategoryService := fetch_by_category_service.NewGetProductsByCategoryService(fetch_by_category_service.GetProductsByCategoryServiceDeps{
+		Repo: fetchByCategoryRepo,
+	})
+	fetchByCategoryHandler := fetch_by_category_handlers.NewGetProductsByCategoryHandler(fetchByCategoryService)
+
+	// 🧹 Archive Product Setup
+	archiveProductRepo := archive_product_repo.NewProductArchiveRepository(db)
+	archiveProductService := archive_product_services.NewArchiveProductService(archive_product_services.ArchiveProductServiceDeps{
+		Repo: archiveProductRepo,
+	})
+	archiveProductHandler := archive_product_handlers.NewArchiveProductHandler(archiveProductService)
+
+	// 📝 Add Product Review Setup
+	reviewRepo := repo_add_review.NewProductAddReviewRepository(db)
+	addReviewService := review_services.NewAddProductReviewService(review_services.AddProductReviewServiceDeps{
+		Repo: reviewRepo,
+	})
+	addReviewHandler := review_handlers.NewAddProductReviewHandler(addReviewService)
+
+	// ✏️ Edit Product Review Setup
+	editReviewRepo := repo_edit_review.NewProductEditReviewRepository(db)
+	editReviewService := edit_review_service.NewEditProductReviewService(edit_review_service.EditProductReviewServiceDeps{
+		Repo: editReviewRepo,
+	})
+	editReviewHandler := edit_review_handler.NewEditProductReviewHandler(editReviewService)
+
+	// 🗑️ Archive Product Review Setup
+	archiveReviewRepo := repo_archive_review.NewProductArchiveReviewRepository(db)
+	archiveReviewService := archive_review_services.NewArchiveProductReviewService(archive_review_services.ArchiveProductReviewServiceDeps{
+		Repo: archiveReviewRepo,
+	})
+	archiveReviewHandler := archive_review_handlers.NewArchiveProductReviewHandler(archiveReviewService)
+
+	// ------------------------------------------------------------
+	// 🗨️ Reply to Product Review Setup
+	replyRepo := repo_reply_review.NewProductReplyReviewRepository(db)
+	replyService := service_reply_review.NewReplyToReviewService(service_reply_review.ReplyToReviewServiceDeps{
+		Repo: replyRepo,
+	})
+	replyHandler := handler_reply_review.NewReplyToReviewHandler(replyService)
+
+	// ✏️ Edit Review Reply Setup
+	editReplyRepo := repo_edit_review_reply.NewProductReviewReplyEditRepository(db)
+	editReplyService := edit_review_reply_service.NewEditReviewReplyService(edit_review_reply_service.EditReviewReplyServiceDeps{
+		Repo: editReplyRepo,
+	})
+	editReplyHandler := edit_review_reply_handler.NewEditReviewReplyHandler(editReplyService)
+
+	// 🗑️ Archive Review Reply Setup
+	archiveReplyRepo := archive_reply_repo.NewProductReviewReplyArchiveRepository(db)
+	archiveReplyService := archive_reply_service.NewArchiveReviewReplyService(archive_reply_service.ArchiveReviewReplyServiceDeps{
+		Repo: archiveReplyRepo,
+	})
+	archiveReplyHandler := archive_reply_handler.NewArchiveReviewReplyHandler(archiveReplyService)
+
+	// 🆕 Get All Product Reviews with Replies Setup
+	getReviewsRepo := repo_get_reviews.NewProductGetAllReviewsRepository(db)
+	getReviewsService := reviews_services.NewGetAllProductReviewsService(reviews_services.GetAllProductReviewsServiceDeps{
+		Repo: getReviewsRepo,
+	})
+	getReviewsHandler := reviews_handlers.NewGetAllReviewsHandler(getReviewsService)
+
 	// 📦 Routes
 	r.Route("/api/auth/google", func(r chi.Router) {
 		r.Post("/", googleAuthHandler.Handle)
@@ -243,11 +520,42 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 		r.Post("/switch-mode", switchModeHandler.Handle)
 	})
 
+	// 🌐 Public Feed/Search Routes
+	r.Get("/api/feed", feedSearchHandler.HandleFeed)
+	r.Get("/api/search", feedSearchHandler.HandleSearch)
+
+	// 🆕 Public Product Reviews Endpoint
+	r.Get("/api/products/{product_id}/reviews", getReviewsHandler.Handle)
+
+	// 🌲 Public category tree route
+	r.Get("/api/categories/tree", categoryTreeHandler.Handle)
+
+	// 🛍️ Public route: Get all products by category
+	r.Get("/api/category-products", fetchByCategoryHandler.Handle)
+
 	r.Route("/api/seller", func(r chi.Router) {
 		r.Use(token.AttachAccessToken)
 
+		// 🧾 Create Seller Profile Metadata
+		r.Post("/profile/metadata", sellerProfileHandler.Handle)
+
 		// ✅ Create Product
 		r.Post("/products", productHandler.Handle)
+
+		// 🆕 Update Product Title and/or Description
+		r.Put("/products/{product_id}", updateProductInfoHandler.Handle)
+
+		// 🆕 Add Product Media (image or promo_video)
+		r.Post("/products/{product_id}/media", addProductMediaHandler.Handle)
+
+		// 🗑️ Unified media archive endpoint
+		r.Delete("/api/seller/products/{product_id}/media/{media_id}", archiveMediaHandler.Handle)
+
+		// PUT /api/seller/products/:product_id/images/:media_id/set-primary
+		r.Put("/products/{product_id}/images/{media_id}/set-primary", setPrimaryImageHandler.Handle)
+
+		// ✅ Archive product (soft delete)
+		r.Put("/products/{product_id}/archive", archiveProductHandler.Handle)
 
 		// ➕ Add Variant to Product
 		r.Post("/products/{product_id}/variants", addVariantHandler.Handle)
@@ -302,6 +610,43 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 		// ❌ Remove Wholesale Discount from Variant
 		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-discount", removeWholesaleDiscountHandler.Handle)
+
+	})
+
+	r.Route("/api/cart", func(r chi.Router) {
+		r.Use(token.AttachAccessToken)
+
+		r.Post("/add", addToCartHandler.Handle)
+		r.Put("/update", updateCartQuantityHandler.Handle) // ⬅️ Add here
+
+		r.Delete("/remove/{variant_id}", removeCartHandler.Handle) // ⬅️ Remove specific item
+		r.Delete("/clear", clearCartHandler.Handle)                // ⬅️ Clear entire cart
+
+		r.Get("/items", getAllCartItemsHandler.Handle) // 🆕 Get All Cart Items
+		r.Post("/summary", cartSummaryHandler.Handle)  // 🆕 Cart Summary
+
+		r.Post("/checkout/initiate", checkoutHandler.Handle) // 🧾 Add this line
+
+	})
+
+	r.Route("/api/products", func(r chi.Router) {
+		r.Use(token.AttachAccessToken)
+
+		r.Post("/{product_id}/reviews", addReviewHandler.Handle)
+
+		// ✏️ Edit Review
+		r.Put("/{product_id}/reviews/{review_id}", editReviewHandler.Handle)
+
+		// 🗑️ Archive a Review
+		r.Put("/{product_id}/reviews/{review_id}/archive", archiveReviewHandler.Handle)
+
+		// 🗨️ Reply to Review (Seller Only)
+		r.Post("/{product_id}/reviews/{review_id}/reply", replyHandler.Handle)
+
+		// ✏️ Edit Review Reply (Seller Only)
+		r.Put("/{product_id}/reviews/{review_id}/reply", editReplyHandler.Handle)
+
+		r.Put("/{product_id}/reviews/{review_id}/reply/archive", archiveReplyHandler.Handle)
 
 	})
 
