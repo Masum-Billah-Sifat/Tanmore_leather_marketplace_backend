@@ -1,4 +1,3 @@
-// my updated main.go with background jobs attached to it
 package main
 
 import (
@@ -11,16 +10,20 @@ import (
 	"syscall"
 	"time"
 
-	api_http "tanmore_backend/internal/api/http" // 🟢 alias to avoid stdlib conflict
+	api_http "tanmore_backend/internal/api/http"
 	"tanmore_backend/internal/cache"
 	"tanmore_backend/internal/config"
 	"tanmore_backend/internal/db"
 	"tanmore_backend/internal/jobs/engine"
+	"tanmore_backend/internal/storage" // ✅ ADD THIS
 )
 
 func main() {
 	// Load config
 	cfg := config.LoadConfig()
+
+	// ✅ Connect to MinIO
+	storage.ConnectMinIO(cfg)
 
 	// Connect to Postgres
 	db.ConnectDB(cfg)
@@ -28,16 +31,16 @@ func main() {
 	// Connect to Redis
 	cache.ConnectRedis(cfg)
 
-	// ✅ Start background job processor
+	// Start background job processor
 	ctx, cancel := context.WithCancel(context.Background())
-	processor := engine.NewProcessorEngine(db.Queries) // 🟢 use db.Queries directly
+	processor := engine.NewProcessorEngine(db.Queries)
 	go func() {
 		if err := processor.Start(ctx); err != nil {
 			log.Println("⚠️ Processor stopped:", err)
 		}
 	}()
 
-	// ✅ Graceful shutdown
+	// Graceful shutdown
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
@@ -48,16 +51,79 @@ func main() {
 		os.Exit(0)
 	}()
 
-	// ✅ Create router from your API package
+	// Create router
 	r := api_http.NewRouter(db.DB, cache.RedisClient)
 
-	// ✅ Start HTTP server
+	// Start HTTP server
 	fmt.Println("✅ Server starting on port", cfg.AppPort)
 	err := http.ListenAndServe(":"+cfg.AppPort, r)
 	if err != nil {
 		log.Fatal("Server failed:", err)
 	}
 }
+
+// // my updated main.go with background jobs attached to it
+// package main
+
+// import (
+// 	"context"
+// 	"fmt"
+// 	"log"
+// 	"net/http"
+// 	"os"
+// 	"os/signal"
+// 	"syscall"
+// 	"time"
+
+// 	api_http "tanmore_backend/internal/api/http" // 🟢 alias to avoid stdlib conflict
+// 	"tanmore_backend/internal/cache"
+// 	"tanmore_backend/internal/config"
+// 	"tanmore_backend/internal/db"
+// 	"tanmore_backend/internal/jobs/engine"
+// 	"tanmore_backend/internal/storage"
+
+// )
+
+// func main() {
+// 	// Load config
+// 	cfg := config.LoadConfig()
+
+// 	// Connect to Postgres
+// 	db.ConnectDB(cfg)
+
+// 	// Connect to Redis
+// 	cache.ConnectRedis(cfg)
+
+// 	// ✅ Start background job processor
+// 	ctx, cancel := context.WithCancel(context.Background())
+// 	processor := engine.NewProcessorEngine(db.Queries) // 🟢 use db.Queries directly
+// 	go func() {
+// 		if err := processor.Start(ctx); err != nil {
+// 			log.Println("⚠️ Processor stopped:", err)
+// 		}
+// 	}()
+
+// 	// ✅ Graceful shutdown
+// 	sigs := make(chan os.Signal, 1)
+// 	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+// 	go func() {
+// 		<-sigs
+// 		log.Println("📦 Shutting down gracefully...")
+// 		cancel()
+// 		time.Sleep(1 * time.Second)
+// 		os.Exit(0)
+// 	}()
+
+// 	// ✅ Create router from your API package
+// 	r := api_http.NewRouter(db.DB, cache.RedisClient)
+
+// 	// ✅ Start HTTP server
+// 	fmt.Println("✅ Server starting on port", cfg.AppPort)
+// 	err := http.ListenAndServe(":"+cfg.AppPort, r)
+// 	if err != nil {
+// 		log.Fatal("Server failed:", err)
+// 	}
+// }
 
 // its the initial one where we actually tried to work with the user creation endpoint remember this is when we started
 

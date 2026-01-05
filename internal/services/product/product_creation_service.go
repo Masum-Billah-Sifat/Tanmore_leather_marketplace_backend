@@ -58,9 +58,42 @@ type CreateProductInput struct {
 
 // ------------------------------------------------------------
 // 📦 Result returned to handler
+// type CreateProductResult struct {
+// 	ProductID  uuid.UUID
+// 	VariantIDs []uuid.UUID
+// }
+
 type CreateProductResult struct {
-	ProductID  uuid.UUID
-	VariantIDs []uuid.UUID
+	Product ProductPayload `json:"product"`
+}
+
+type ProductPayload struct {
+	ID              uuid.UUID        `json:"id"`
+	Title           string           `json:"title"`
+	Description     string           `json:"description"`
+	ImageURLs       []string         `json:"image_urls"`
+	PromoVideoURL   *string          `json:"promo_video_url,omitempty"`
+	CategoryID      uuid.UUID        `json:"category_id"`
+	CategoryName    string           `json:"category_name"`
+	SellerID        uuid.UUID        `json:"seller_id"`
+	SellerStoreName string           `json:"seller_store_name"`
+	Variants        []VariantPayload `json:"variants"`
+}
+
+type VariantPayload struct {
+	ID                    uuid.UUID `json:"id"`
+	Color                 string    `json:"color"`
+	Size                  string    `json:"size"`
+	RetailPrice           int64     `json:"retail_price"`
+	InStock               bool      `json:"in_stock"`
+	StockQuantity         int64     `json:"stock_quantity"`
+	RetailDiscount        *int64    `json:"retail_discount,omitempty"`
+	RetailDiscountType    *string   `json:"retail_discount_type,omitempty"`
+	WholesalePrice        *int64    `json:"wholesale_price,omitempty"`
+	MinQtyWholesale       *int64    `json:"min_qty_wholesale,omitempty"`
+	WholesaleDiscount     *int64    `json:"wholesale_discount,omitempty"`
+	WholesaleDiscountType *string   `json:"wholesale_discount_type,omitempty"`
+	WeightGrams           int64     `json:"weight_grams"`
 }
 
 // ------------------------------------------------------------
@@ -92,6 +125,11 @@ func (s *CreateProductService) Start(
 	productID := uuidutil.New()
 	variantIDs := make([]uuid.UUID, 0)
 
+	var (
+		category   sqlc.Category
+		sellerMeta sqlc.SellerProfileMetadatum
+	)
+
 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
 
 		// ------------------------------------------------------------
@@ -111,14 +149,14 @@ func (s *CreateProductService) Start(
 
 		// ------------------------------------------------------------
 		// Step 2: Fetch seller profile metadata (for event payload)
-		sellerMeta, err := q.GetSellerProfileMetadataBySellerID(ctx, input.UserID)
+		sellerMeta, err = q.GetSellerProfileMetadataBySellerID(ctx, input.UserID)
 		if err != nil {
 			return errors.NewNotFoundError("seller_profile_metadata")
 		}
 
 		// ------------------------------------------------------------
 		// Step 3: Validate category
-		category, err := q.GetCategoryByID(ctx, input.CategoryID)
+		category, err = q.GetCategoryByID(ctx, input.CategoryID)
 		if err != nil {
 			return errors.NewNotFoundError("category")
 		}
@@ -305,8 +343,46 @@ func (s *CreateProductService) Start(
 		return nil, err
 	}
 
-	return &CreateProductResult{
-		ProductID:  productID,
-		VariantIDs: variantIDs,
-	}, nil
+	// return &CreateProductResult{
+	// 	ProductID:  productID,
+	// 	VariantIDs: variantIDs,
+	// }, nil
+
+	// 🔁 Transform to output format
+	var variantsOutput []VariantPayload
+	for i, v := range input.Variants {
+		variantsOutput = append(variantsOutput, VariantPayload{
+			ID:                    variantIDs[i],
+			Color:                 v.Color,
+			Size:                  v.Size,
+			RetailPrice:           v.RetailPrice,
+			InStock:               v.InStock,
+			StockQuantity:         v.StockQuantity,
+			RetailDiscount:        v.RetailDiscount,
+			RetailDiscountType:    v.RetailDiscountType,
+			WholesalePrice:        v.WholesalePrice,
+			MinQtyWholesale:       v.MinQtyWholesale,
+			WholesaleDiscount:     v.WholesaleDiscount,
+			WholesaleDiscountType: v.WholesaleDiscountType,
+			WeightGrams:           v.WeightGrams,
+		})
+	}
+
+	result := &CreateProductResult{
+		Product: ProductPayload{
+			ID:              productID,
+			Title:           input.Title,
+			Description:     input.Description,
+			ImageURLs:       input.ImageURLs,
+			PromoVideoURL:   input.PromoVideoURL,
+			CategoryID:      input.CategoryID,
+			CategoryName:    category.Name,
+			SellerID:        input.UserID,
+			SellerStoreName: sellerMeta.Sellerstorename,
+			Variants:        variantsOutput,
+		},
+	}
+
+	return result, nil
+
 }

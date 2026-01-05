@@ -149,3 +149,19 @@ func ToStringPtr(ns sql.NullString) *string {
 	}
 	return nil
 }
+
+// ToInt64Ptr converts sql.NullInt64 to *int64
+func ToInt64Ptr(n sql.NullInt64) *int64 {
+	if n.Valid {
+		return &n.Int64
+	}
+	return nil
+}
+
+// ToInt32Ptr converts sql.NullInt32 to *int32
+func ToInt32Ptr(n sql.NullInt32) *int32 {
+	if n.Valid {
+		return &n.Int32
+	}
+	return nil
+}

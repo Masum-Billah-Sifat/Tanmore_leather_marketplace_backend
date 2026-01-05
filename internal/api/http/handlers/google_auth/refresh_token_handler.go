@@ -28,24 +28,20 @@ type refreshTokenRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// 🔁 POST /api/auth/refresh
 func (h *RefreshTokenHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Decode request body
 	var body refreshTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.BadRequest(w, err)
 		return
 	}
 
-	// 2️⃣ Extract headers
 	userAgent := r.Header.Get("User-Agent")
 	platform := r.Header.Get("X-Platform")
 	deviceFingerprint := r.Header.Get("X-Device-Fingerprint")
 	ipAddress := r.RemoteAddr
 
-	// 3️⃣ Create input for service
 	input := google_auth.RefreshTokenInput{
 		RawToken:          body.RefreshToken,
 		UserAgent:         userAgent,
@@ -54,17 +50,65 @@ func (h *RefreshTokenHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		IPAddress:         ipAddress,
 	}
 
-	// 4️⃣ Invoke service layer
 	result, err := h.Service.HandleRefreshTokenRotation(ctx, input)
 	if err != nil {
 		response.ServerError(w, err)
 		return
 	}
 
-	// 5️⃣ Return response
 	response.OK(w, "Refresh successful", map[string]interface{}{
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"expires_in":    result.ExpiresIn,
+		"user": map[string]interface{}{
+			"is_seller_profile_approved": result.IsSellerProfileApproved, // ✅ NEW
+		},
 	})
 }
+
+// // 🔁 POST /api/auth/refresh
+// func (h *RefreshTokenHandler) Handle(w http.ResponseWriter, r *http.Request) {
+// 	ctx := r.Context()
+
+// 	// 1️⃣ Decode request body
+// 	var body refreshTokenRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+// 		response.BadRequest(w, err)
+// 		return
+// 	}
+
+// 	// 2️⃣ Extract headers
+// 	userAgent := r.Header.Get("User-Agent")
+// 	platform := r.Header.Get("X-Platform")
+// 	deviceFingerprint := r.Header.Get("X-Device-Fingerprint")
+// 	ipAddress := r.RemoteAddr
+
+// 	fmt.Println("📥 Refresh Handler")
+// 	fmt.Println("🔘 Refresh token:", body.RefreshToken)
+// 	fmt.Println("🔘 User-Agent:", userAgent)
+// 	fmt.Println("🔘 X-Platform:", platform)
+// 	fmt.Println("🔘 X-Device-Fingerprint:", deviceFingerprint)
+
+// 	// 3️⃣ Create input for service
+// 	input := google_auth.RefreshTokenInput{
+// 		RawToken:          body.RefreshToken,
+// 		UserAgent:         userAgent,
+// 		Platform:          platform,
+// 		DeviceFingerprint: deviceFingerprint,
+// 		IPAddress:         ipAddress,
+// 	}
+
+// 	// 4️⃣ Invoke service layer
+// 	result, err := h.Service.HandleRefreshTokenRotation(ctx, input)
+// 	if err != nil {
+// 		response.ServerError(w, err)
+// 		return
+// 	}
+
+// 	// 5️⃣ Return response
+// 	response.OK(w, "Refresh successful", map[string]interface{}{
+// 		"access_token":  result.AccessToken,
+// 		"refresh_token": result.RefreshToken,
+// 		"expires_in":    result.ExpiresIn,
+// 	})
+// }

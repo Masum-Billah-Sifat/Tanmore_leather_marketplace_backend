@@ -289,3 +289,91 @@ WHERE productid = sqlc.arg(productid)
   AND variantid = sqlc.arg(variantid);
 
 
+-- name: GetVariantIndexesByProductAndSeller :many
+SELECT
+  id,
+  categoryid,
+  iscategoryarchived,
+  categoryname,
+  sellerid,
+  issellerapproved,
+  issellerarchived,
+  issellerbanned,
+  sellerstorename,
+  productid,
+  isproductapproved,
+  isproductarchived,
+  isproductbanned,
+  producttitle,
+  productdescription,
+  productimages,
+  productpromovideourl,
+  variantid,
+  isvariantarchived,
+  isvariantinstock,
+  stockamount,
+  color,
+  size,
+  retailprice,
+  retaildiscounttype,
+  retaildiscount,
+  has_retail_discount,
+  haswholesaleenabled,
+  wholesaleprice,
+  wholesaleminquantity,
+  wholesalediscounttype,
+  wholesalediscount,
+  weight_grams,
+  search_vector,
+  views,
+  createdat,
+  updatedat
+FROM product_variant_indexes
+WHERE productid = $1
+  AND sellerid = $2;
+
+
+-- name: GetAllProductVariantIndexesBySeller :many
+SELECT
+  id,
+  categoryid,
+  iscategoryarchived,
+  categoryname,
+  sellerid,
+  issellerapproved,
+  issellerarchived,
+  issellerbanned,
+  sellerstorename,
+  productid,
+  isproductapproved,
+  isproductarchived,
+  isproductbanned,
+  producttitle,
+  productdescription,
+  productimages,
+  productpromovideourl,
+  variantid,
+  isvariantarchived,
+  isvariantinstock,
+  stockamount,
+  color,
+  size,
+  retailprice,
+  retaildiscounttype,
+  retaildiscount,
+  has_retail_discount,
+  haswholesaleenabled,
+  wholesaleprice,
+  wholesaleminquantity,
+  wholesalediscounttype,
+  wholesalediscount,
+  weight_grams,
+  search_vector,
+  views,
+  createdat,
+  updatedat
+FROM product_variant_indexes
+WHERE sellerid = $1
+  AND issellerapproved = true
+  AND issellerarchived = false
+  AND issellerbanned = false;

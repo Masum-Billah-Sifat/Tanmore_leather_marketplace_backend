@@ -29,24 +29,20 @@ type googleLoginRequest struct {
 	IDToken string `json:"id_token"`
 }
 
-// 🚪 POST /api/auth/google
 func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 📨 Parse JSON body
 	var body googleLoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		response.BadRequest(w, err)
 		return
 	}
 
-	// 🧩 Extract headers
 	userAgent := r.Header.Get("User-Agent")
 	platform := r.Header.Get("X-Platform")
 	deviceFP := r.Header.Get("X-Device-Fingerprint")
 	ipAddress := r.RemoteAddr
 
-	// 📦 Map to service input
 	input := googleauthsvc.GoogleLoginInput{
 		IDToken:           body.IDToken,
 		UserAgent:         userAgent,
@@ -55,23 +51,69 @@ func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 		IPAddress:         ipAddress,
 	}
 
-	// 🚀 Call service
 	result, err := h.Service.Start(ctx, input)
 	if err != nil {
 		response.ServerError(w, err)
 		return
 	}
 
-	// ✅ Respond with tokens + user info
 	response.OK(w, "Login successful", map[string]interface{}{
 		"access_token":  result.AccessToken,
 		"refresh_token": result.RefreshToken,
 		"expires_in":    result.ExpiresIn,
 		"user": map[string]interface{}{
-			"id":    result.User.ID.String(),
-			"name":  result.User.Name,
-			"email": result.User.Email,
-			"image": result.User.Image,
+			"id":                         result.User.ID.String(),
+			"name":                       result.User.Name,
+			"email":                      result.User.Email,
+			"image":                      result.User.Image,
+			"is_seller_profile_approved": result.User.IsSellerProfileApproved, // ✅ added
 		},
 	})
 }
+
+// // 🚪 POST /api/auth/google
+// func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
+// 	ctx := r.Context()
+
+// 	// 📨 Parse JSON body
+// 	var body googleLoginRequest
+// 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+// 		response.BadRequest(w, err)
+// 		return
+// 	}
+
+// 	// 🧩 Extract headers
+// 	userAgent := r.Header.Get("User-Agent")
+// 	platform := r.Header.Get("X-Platform")
+// 	deviceFP := r.Header.Get("X-Device-Fingerprint")
+// 	ipAddress := r.RemoteAddr
+
+// 	// 📦 Map to service input
+// 	input := googleauthsvc.GoogleLoginInput{
+// 		IDToken:           body.IDToken,
+// 		UserAgent:         userAgent,
+// 		Platform:          platform,
+// 		DeviceFingerprint: deviceFP,
+// 		IPAddress:         ipAddress,
+// 	}
+
+// 	// 🚀 Call service
+// 	result, err := h.Service.Start(ctx, input)
+// 	if err != nil {
+// 		response.ServerError(w, err)
+// 		return
+// 	}
+
+// 	// ✅ Respond with tokens + user info
+// 	response.OK(w, "Login successful", map[string]interface{}{
+// 		"access_token":  result.AccessToken,
+// 		"refresh_token": result.RefreshToken,
+// 		"expires_in":    result.ExpiresIn,
+// 		"user": map[string]interface{}{
+// 			"id":    result.User.ID.String(),
+// 			"name":  result.User.Name,
+// 			"email": result.User.Email,
+// 			"image": result.User.Image,
+// 		},
+// 	})
+// }

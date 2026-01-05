@@ -39,6 +39,34 @@ func (q *Queries) DeprecateRefreshTokenByID(ctx context.Context, arg DeprecateRe
 	return err
 }
 
+const deprecateRefreshTokensBySession = `-- name: DeprecateRefreshTokensBySession :exec
+UPDATE user_refresh_tokens
+SET
+  is_deprecated = $5,
+  deprecated_reason = $4,
+  deprecated_at = $3
+WHERE user_id = $1 AND session_id = $2
+`
+
+type DeprecateRefreshTokensBySessionParams struct {
+	UserID           uuid.UUID      `json:"user_id"`
+	SessionID        uuid.UUID      `json:"session_id"`
+	DeprecatedAt     sql.NullTime   `json:"deprecated_at"`
+	DeprecatedReason sql.NullString `json:"deprecated_reason"`
+	IsDeprecated     bool           `json:"is_deprecated"`
+}
+
+func (q *Queries) DeprecateRefreshTokensBySession(ctx context.Context, arg DeprecateRefreshTokensBySessionParams) error {
+	_, err := q.db.ExecContext(ctx, deprecateRefreshTokensBySession,
+		arg.UserID,
+		arg.SessionID,
+		arg.DeprecatedAt,
+		arg.DeprecatedReason,
+		arg.IsDeprecated,
+	)
+	return err
+}
+
 const getRefreshTokenByHash = `-- name: GetRefreshTokenByHash :one
 SELECT
   id,

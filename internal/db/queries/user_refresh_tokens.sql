@@ -31,3 +31,12 @@ SET
   deprecated_reason = $3,
   deprecated_at     = $4
 WHERE id = $1;
+
+
+-- name: DeprecateRefreshTokensBySession :exec
+UPDATE user_refresh_tokens
+SET
+  is_deprecated = $5,
+  deprecated_reason = $4,
+  deprecated_at = $3
+WHERE user_id = $1 AND session_id = $2;

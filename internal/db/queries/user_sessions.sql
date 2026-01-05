@@ -23,3 +23,10 @@ SELECT
 FROM user_sessions
 WHERE id = $1
   AND user_id = $2;
+
+
+-- name: RevokeUserSession :exec
+UPDATE user_sessions
+SET is_revoked = $4,
+    updated_at = $3
+WHERE id = $1 AND user_id = $2;

@@ -7,6 +7,7 @@ package google_auth
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"tanmore_backend/internal/db/sqlc"
@@ -29,10 +30,17 @@ type RefreshTokenInput struct {
 }
 
 // 📦 Output struct to return new tokens
+// type RefreshTokenOutput struct {
+// 	AccessToken  string
+// 	RefreshToken string
+// 	ExpiresIn    int // seconds
+// }
+
 type RefreshTokenOutput struct {
-	AccessToken  string
-	RefreshToken string
-	ExpiresIn    int // seconds
+	AccessToken             string
+	RefreshToken            string
+	ExpiresIn               int
+	IsSellerProfileApproved bool // ✅ add this
 }
 
 // 🔐 Service to manage token rotation
@@ -45,8 +53,12 @@ func NewRefreshTokenService(repo token_refresh.TokenRefreshRepoInterface) *Refre
 	return &RefreshTokenService{repo: repo}
 }
 
-// 🔁 Main refresh flow
 func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, input RefreshTokenInput) (*RefreshTokenOutput, error) {
+	fmt.Println("🔁 [Refresh Flow] Got request")
+	fmt.Println("🧾 Raw token:", input.RawToken)
+	fmt.Println("🧾 User Agent:", input.UserAgent)
+	fmt.Println("🧾 Device Fingerprint:", input.DeviceFingerprint)
+
 	tokenHash := token.HashRefreshToken(input.RawToken)
 
 	var (
@@ -56,16 +68,11 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 	)
 
 	err := s.repo.WithTx(ctx, func(q *sqlc.Queries) error {
-		// Step 1: Find the refresh token
 		refreshToken, err := q.GetRefreshTokenByHash(ctx, tokenHash)
-		if err != nil {
+		if err != nil || refreshToken.IsDeprecated || refreshToken.ExpiresAt.Before(timeutil.NowUTC()) {
 			return errors.NewAuthError("invalid or expired refresh token")
 		}
-		if refreshToken.IsDeprecated || refreshToken.ExpiresAt.Before(timeutil.NowUTC()) {
-			return errors.NewAuthError("refresh token is no longer valid")
-		}
 
-		// Step 2: Get user and validate
 		user, err = q.GetUserByID(ctx, refreshToken.UserID)
 		if err != nil {
 			return errors.NewNotFoundError("user")
@@ -74,24 +81,18 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 			return errors.NewAuthError("user is not allowed to refresh session")
 		}
 
-		// Step 3: Get session and validate
 		session, err = q.GetSessionByIDAndUserID(ctx, sqlc.GetSessionByIDAndUserIDParams{
 			ID:     refreshToken.SessionID,
 			UserID: refreshToken.UserID,
 		})
-		if err != nil {
-			return errors.NewNotFoundError("session")
-		}
-		if session.IsRevoked || session.IsArchived {
+		if err != nil || session.IsRevoked || session.IsArchived {
 			return errors.NewAuthError("session is invalid or revoked")
 		}
 
-		// Step 4: Match headers
 		if session.UserAgent != input.UserAgent || session.DeviceFingerprint != input.DeviceFingerprint {
 			return errors.NewAuthError("session fingerprint mismatch")
 		}
 
-		// Step 5: Deprecate old token
 		err = q.DeprecateRefreshTokenByID(ctx, sqlc.DeprecateRefreshTokenByIDParams{
 			ID:               refreshToken.ID,
 			IsDeprecated:     true,
@@ -102,7 +103,6 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 			return errors.NewServerError("deprecating old token")
 		}
 
-		// Step 6: Insert new refresh token
 		newRefreshID := uuid.New()
 		rawRefreshToken, err := token.GenerateRefreshToken()
 		if err != nil {
@@ -124,17 +124,17 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 			return errors.NewServerError("inserting new refresh token")
 		}
 
-		// Step 7: Generate new access token
-		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 10080)
+		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 1)
 		if err != nil {
 			return errors.NewServerError("generating access token")
 		}
 
-		// ✅ Prepare final output
+		// ✅ Include is_seller_profile_approved in output
 		output = &RefreshTokenOutput{
-			AccessToken:  accessToken,
-			RefreshToken: rawRefreshToken,
-			ExpiresIn:    15 * 60, // 15 minutes
+			AccessToken:             accessToken,
+			RefreshToken:            rawRefreshToken,
+			ExpiresIn:               15 * 60,
+			IsSellerProfileApproved: user.IsSellerProfileApproved, // ✅ NEW FIELD
 		}
 		return nil
 	})
@@ -144,3 +144,114 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 	}
 	return output, nil
 }
+
+// // 🔁 Main refresh flow
+// func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, input RefreshTokenInput) (*RefreshTokenOutput, error) {
+
+// 	fmt.Println("🔁 [Refresh Flow] Got request")
+// 	fmt.Println("🧾 Raw token:", input.RawToken)
+// 	fmt.Println("🧾 User Agent:", input.UserAgent)
+// 	fmt.Println("🧾 Device Fingerprint:", input.DeviceFingerprint)
+
+// 	tokenHash := token.HashRefreshToken(input.RawToken)
+// 	fmt.Println("🔑 Hashed Token:", tokenHash)
+
+// 	// tokenHash := token.HashRefreshToken(input.RawToken)
+
+// 	var (
+// 		user    sqlc.User
+// 		session sqlc.UserSession
+// 		output  *RefreshTokenOutput
+// 	)
+
+// 	err := s.repo.WithTx(ctx, func(q *sqlc.Queries) error {
+// 		// Step 1: Find the refresh token
+// 		refreshToken, err := q.GetRefreshTokenByHash(ctx, tokenHash)
+// 		if err != nil {
+// 			fmt.Println("❌ Refresh token not found or expired:", err)
+
+// 			return errors.NewAuthError("invalid or expired refresh token")
+// 		}
+// 		if refreshToken.IsDeprecated || refreshToken.ExpiresAt.Before(timeutil.NowUTC()) {
+// 			return errors.NewAuthError("refresh token is no longer valid")
+// 		}
+
+// 		// Step 2: Get user and validate
+// 		user, err = q.GetUserByID(ctx, refreshToken.UserID)
+// 		if err != nil {
+// 			return errors.NewNotFoundError("user")
+// 		}
+// 		if user.IsArchived || user.IsBanned {
+// 			return errors.NewAuthError("user is not allowed to refresh session")
+// 		}
+
+// 		// Step 3: Get session and validate
+// 		session, err = q.GetSessionByIDAndUserID(ctx, sqlc.GetSessionByIDAndUserIDParams{
+// 			ID:     refreshToken.SessionID,
+// 			UserID: refreshToken.UserID,
+// 		})
+// 		if err != nil {
+// 			return errors.NewNotFoundError("session")
+// 		}
+// 		if session.IsRevoked || session.IsArchived {
+// 			return errors.NewAuthError("session is invalid or revoked")
+// 		}
+
+// 		// Step 4: Match headers
+// 		if session.UserAgent != input.UserAgent || session.DeviceFingerprint != input.DeviceFingerprint {
+// 			return errors.NewAuthError("session fingerprint mismatch")
+// 		}
+
+// 		// Step 5: Deprecate old token
+// 		err = q.DeprecateRefreshTokenByID(ctx, sqlc.DeprecateRefreshTokenByIDParams{
+// 			ID:               refreshToken.ID,
+// 			IsDeprecated:     true,
+// 			DeprecatedReason: sqlnull.String("rotated"),
+// 			DeprecatedAt:     sqlnull.Time(timeutil.NowUTC()),
+// 		})
+// 		if err != nil {
+// 			return errors.NewServerError("deprecating old token")
+// 		}
+
+// 		// Step 6: Insert new refresh token
+// 		newRefreshID := uuid.New()
+// 		rawRefreshToken, err := token.GenerateRefreshToken()
+// 		if err != nil {
+// 			return errors.NewServerError("generating refresh token")
+// 		}
+
+// 		err = q.InsertRefreshToken(ctx, sqlc.InsertRefreshTokenParams{
+// 			ID:               newRefreshID,
+// 			UserID:           user.ID,
+// 			SessionID:        session.ID,
+// 			TokenHash:        token.HashRefreshToken(rawRefreshToken),
+// 			DeprecatedReason: sqlnull.String(""),
+// 			IsDeprecated:     false,
+// 			DeprecatedAt:     sqlnull.Time(time.Time{}),
+// 			ExpiresAt:        timeutil.NowUTC().Add(90 * 24 * time.Hour),
+// 			CreatedAt:        timeutil.NowUTC(),
+// 		})
+// 		if err != nil {
+// 			return errors.NewServerError("inserting new refresh token")
+// 		}
+
+// 		// Step 7: Generate new access token
+// 		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 1)
+// 		if err != nil {
+// 			return errors.NewServerError("generating access token")
+// 		}
+
+// 		// ✅ Prepare final output
+// 		output = &RefreshTokenOutput{
+// 			AccessToken:  accessToken,
+// 			RefreshToken: rawRefreshToken,
+// 			ExpiresIn:    15 * 60, // 15 minutes
+// 		}
+// 		return nil
+// 	})
+
+// 	if err != nil {
+// 		return nil, err
+// 	}
+// 	return output, nil
+// }

@@ -8,6 +8,8 @@ import (
 	dfmiddleware "github.com/go-chi/chi/v5/middleware"
 	"github.com/redis/go-redis/v9"
 
+	"tanmore_backend/internal/api/http/middleware" // adjust import path if needed
+
 	repo_googleauth "tanmore_backend/internal/repository/google_auth"
 	repo_token_refresh "tanmore_backend/internal/repository/token_refresh"
 
@@ -172,6 +174,25 @@ import (
 	repo_get_reviews "tanmore_backend/internal/repository/product/product_get_all_reviews"
 	reviews_services "tanmore_backend/internal/services/product"
 
+	// 🛑 Logout Session
+	logout_handlers "tanmore_backend/internal/api/http/handlers/logout"
+	repo_logout "tanmore_backend/internal/repository/logout"
+	logout_services "tanmore_backend/internal/services/logout"
+
+	// 🎥 Media Upload Presign
+	media_handlers "tanmore_backend/internal/api/http/handlers/media"
+	media_services "tanmore_backend/internal/services/media"
+
+	// 🆕 Product Full Detail (Seller Side)
+	product_full_detail_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_product_full_detail "tanmore_backend/internal/repository/product/product_get_full_detail"
+	product_full_detail_services "tanmore_backend/internal/services/product"
+
+	// 🆕 Fetch All Products for Seller (Grouped by moderation state)
+	get_all_products_handler "tanmore_backend/internal/api/http/handlers/product"
+	repo_get_all_products_seller "tanmore_backend/internal/repository/product/product_get_all_grouped"
+	get_all_products_service "tanmore_backend/internal/services/product"
+
 	"tanmore_backend/pkg/token"
 )
 
@@ -183,6 +204,9 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	r.Use(dfmiddleware.RealIP)
 	r.Use(dfmiddleware.Logger)
 	r.Use(dfmiddleware.Recoverer)
+
+	// ✅ 🔥 Add this line to enable CORS!
+	r.Use(middleware.CORSMiddleware)
 
 	// ⚙️ Google Login related stuff
 	googleAuthRepo := repo_googleauth.NewGoogleAuthRepository(db)
@@ -197,6 +221,13 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	// Refresh Token Handler
 	refreshTokenService := google_auth_services.NewRefreshTokenService(tokenRefreshRepo)
 	refreshTokenHandler := google_auth_handlers.NewRefreshTokenHandler(refreshTokenService)
+
+	// 🛑 Logout Handler Setup
+	logoutRepo := repo_logout.NewLogoutRepository(db)
+	logoutService := logout_services.NewLogoutService(logout_services.LogoutServiceDeps{
+		Repo: logoutRepo,
+	})
+	logoutHandler := logout_handlers.NewHandler(logoutService)
 
 	// 🔁 Switch Mode Setup
 	switchModeRepo := repo_switchmode.NewUserModeSwitchRepository(db)
@@ -504,6 +535,36 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	})
 	getReviewsHandler := reviews_handlers.NewGetAllReviewsHandler(getReviewsService)
 
+	// ------------------------------------------------------------
+	// 🎥 Presigned Media Upload Endpoint Wiring (No Repo needed)
+
+	mediaService := media_services.NewMediaService()
+	mediaHandler := media_handlers.NewHandler(mediaService)
+
+	// 🆕 Product Full Detail (Seller Side) Setup
+	productFullDetailRepo := repo_product_full_detail.NewProductGetFullDetailRepository(db)
+	productFullDetailService := product_full_detail_services.NewGetProductFullDetailService(
+		product_full_detail_services.GetProductFullDetailServiceDeps{
+			Repo: productFullDetailRepo,
+		},
+	)
+	productFullDetailHandler := product_full_detail_handlers.NewGetProductFullDetailHandler(productFullDetailService)
+
+	// Inside func NewRouter(...) just before r.Route("/api/media") or wherever the other seller routes are setup:
+	getAllProductsBySellerRepo := repo_get_all_products_seller.NewProductGetAllGroupedRepository(db)
+	getAllProductsBySellerService := get_all_products_service.NewGetAllProductsBySellerService(
+		get_all_products_service.GetAllProductsBySellerServiceDeps{
+			Repo: getAllProductsBySellerRepo,
+		},
+	)
+	getAllProductsBySellerHandler := get_all_products_handler.NewGetAllProductsBySellerHandler(getAllProductsBySellerService)
+
+	r.Route("/api/media", func(r chi.Router) {
+		r.Use(token.AttachAccessToken) // ✅ Require valid access token
+
+		r.Post("/presign-upload", mediaHandler.Handle)
+	})
+
 	// 📦 Routes
 	r.Route("/api/auth/google", func(r chi.Router) {
 		r.Post("/", googleAuthHandler.Handle)
@@ -511,6 +572,11 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 	r.Route("/api/auth/refresh", func(r chi.Router) {
 		r.Post("/", refreshTokenHandler.Handle)
+	})
+
+	r.Route("/api/auth/logout", func(r chi.Router) {
+		r.Use(token.AttachAccessToken) // 🛡️ Requires access token
+		r.Post("/", logoutHandler.Handle)
 	})
 
 	r.Route("/api/user", func(r chi.Router) {
@@ -610,6 +676,12 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 		// ❌ Remove Wholesale Discount from Variant
 		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-discount", removeWholesaleDiscountHandler.Handle)
+
+		// 🆕 Fetch full detail for a seller's product
+		r.Get("/products/{product_id}", productFullDetailHandler.Handle)
+
+		// Add inside r.Route("/api/seller") block:
+		r.Get("/products", getAllProductsBySellerHandler.Handle)
 
 	})
 

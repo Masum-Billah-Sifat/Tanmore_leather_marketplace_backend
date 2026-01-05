@@ -178,6 +178,223 @@ func (q *Queries) EnableWholesaleModeInIndexes(ctx context.Context, arg EnableWh
 	return err
 }
 
+const getAllProductVariantIndexesBySeller = `-- name: GetAllProductVariantIndexesBySeller :many
+SELECT
+  id,
+  categoryid,
+  iscategoryarchived,
+  categoryname,
+  sellerid,
+  issellerapproved,
+  issellerarchived,
+  issellerbanned,
+  sellerstorename,
+  productid,
+  isproductapproved,
+  isproductarchived,
+  isproductbanned,
+  producttitle,
+  productdescription,
+  productimages,
+  productpromovideourl,
+  variantid,
+  isvariantarchived,
+  isvariantinstock,
+  stockamount,
+  color,
+  size,
+  retailprice,
+  retaildiscounttype,
+  retaildiscount,
+  has_retail_discount,
+  haswholesaleenabled,
+  wholesaleprice,
+  wholesaleminquantity,
+  wholesalediscounttype,
+  wholesalediscount,
+  weight_grams,
+  search_vector,
+  views,
+  createdat,
+  updatedat
+FROM product_variant_indexes
+WHERE sellerid = $1
+  AND issellerapproved = true
+  AND issellerarchived = false
+  AND issellerbanned = false
+`
+
+func (q *Queries) GetAllProductVariantIndexesBySeller(ctx context.Context, sellerid uuid.UUID) ([]ProductVariantIndex, error) {
+	rows, err := q.db.QueryContext(ctx, getAllProductVariantIndexesBySeller, sellerid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductVariantIndex
+	for rows.Next() {
+		var i ProductVariantIndex
+		if err := rows.Scan(
+			&i.ID,
+			&i.Categoryid,
+			&i.Iscategoryarchived,
+			&i.Categoryname,
+			&i.Sellerid,
+			&i.Issellerapproved,
+			&i.Issellerarchived,
+			&i.Issellerbanned,
+			&i.Sellerstorename,
+			&i.Productid,
+			&i.Isproductapproved,
+			&i.Isproductarchived,
+			&i.Isproductbanned,
+			&i.Producttitle,
+			&i.Productdescription,
+			pq.Array(&i.Productimages),
+			&i.Productpromovideourl,
+			&i.Variantid,
+			&i.Isvariantarchived,
+			&i.Isvariantinstock,
+			&i.Stockamount,
+			&i.Color,
+			&i.Size,
+			&i.Retailprice,
+			&i.Retaildiscounttype,
+			&i.Retaildiscount,
+			&i.HasRetailDiscount,
+			&i.Haswholesaleenabled,
+			&i.Wholesaleprice,
+			&i.Wholesaleminquantity,
+			&i.Wholesalediscounttype,
+			&i.Wholesalediscount,
+			&i.WeightGrams,
+			&i.SearchVector,
+			&i.Views,
+			&i.Createdat,
+			&i.Updatedat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getVariantIndexesByProductAndSeller = `-- name: GetVariantIndexesByProductAndSeller :many
+SELECT
+  id,
+  categoryid,
+  iscategoryarchived,
+  categoryname,
+  sellerid,
+  issellerapproved,
+  issellerarchived,
+  issellerbanned,
+  sellerstorename,
+  productid,
+  isproductapproved,
+  isproductarchived,
+  isproductbanned,
+  producttitle,
+  productdescription,
+  productimages,
+  productpromovideourl,
+  variantid,
+  isvariantarchived,
+  isvariantinstock,
+  stockamount,
+  color,
+  size,
+  retailprice,
+  retaildiscounttype,
+  retaildiscount,
+  has_retail_discount,
+  haswholesaleenabled,
+  wholesaleprice,
+  wholesaleminquantity,
+  wholesalediscounttype,
+  wholesalediscount,
+  weight_grams,
+  search_vector,
+  views,
+  createdat,
+  updatedat
+FROM product_variant_indexes
+WHERE productid = $1
+  AND sellerid = $2
+`
+
+type GetVariantIndexesByProductAndSellerParams struct {
+	Productid uuid.UUID `json:"productid"`
+	Sellerid  uuid.UUID `json:"sellerid"`
+}
+
+func (q *Queries) GetVariantIndexesByProductAndSeller(ctx context.Context, arg GetVariantIndexesByProductAndSellerParams) ([]ProductVariantIndex, error) {
+	rows, err := q.db.QueryContext(ctx, getVariantIndexesByProductAndSeller, arg.Productid, arg.Sellerid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductVariantIndex
+	for rows.Next() {
+		var i ProductVariantIndex
+		if err := rows.Scan(
+			&i.ID,
+			&i.Categoryid,
+			&i.Iscategoryarchived,
+			&i.Categoryname,
+			&i.Sellerid,
+			&i.Issellerapproved,
+			&i.Issellerarchived,
+			&i.Issellerbanned,
+			&i.Sellerstorename,
+			&i.Productid,
+			&i.Isproductapproved,
+			&i.Isproductarchived,
+			&i.Isproductbanned,
+			&i.Producttitle,
+			&i.Productdescription,
+			pq.Array(&i.Productimages),
+			&i.Productpromovideourl,
+			&i.Variantid,
+			&i.Isvariantarchived,
+			&i.Isvariantinstock,
+			&i.Stockamount,
+			&i.Color,
+			&i.Size,
+			&i.Retailprice,
+			&i.Retaildiscounttype,
+			&i.Retaildiscount,
+			&i.HasRetailDiscount,
+			&i.Haswholesaleenabled,
+			&i.Wholesaleprice,
+			&i.Wholesaleminquantity,
+			&i.Wholesalediscounttype,
+			&i.Wholesalediscount,
+			&i.WeightGrams,
+			&i.SearchVector,
+			&i.Views,
+			&i.Createdat,
+			&i.Updatedat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertProductVariantIndex = `-- name: InsertProductVariantIndex :exec
 INSERT INTO product_variant_indexes (
     id,

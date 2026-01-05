@@ -89,3 +89,27 @@ func (q *Queries) InsertUserSession(ctx context.Context, arg InsertUserSessionPa
 	err := row.Scan(&id)
 	return id, err
 }
+
+const revokeUserSession = `-- name: RevokeUserSession :exec
+UPDATE user_sessions
+SET is_revoked = $4,
+    updated_at = $3
+WHERE id = $1 AND user_id = $2
+`
+
+type RevokeUserSessionParams struct {
+	ID        uuid.UUID `json:"id"`
+	UserID    uuid.UUID `json:"user_id"`
+	UpdatedAt time.Time `json:"updated_at"`
+	IsRevoked bool      `json:"is_revoked"`
+}
+
+func (q *Queries) RevokeUserSession(ctx context.Context, arg RevokeUserSessionParams) error {
+	_, err := q.db.ExecContext(ctx, revokeUserSession,
+		arg.ID,
+		arg.UserID,
+		arg.UpdatedAt,
+		arg.IsRevoked,
+	)
+	return err
+}

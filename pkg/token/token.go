@@ -9,6 +9,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
+	"fmt"
 
 	// "errors"
 	"tanmore_backend/pkg/errors"
@@ -27,19 +28,34 @@ import (
 var jwtSecret = []byte("supersecretkey") // Replace with env
 
 // 🧱 Access token payload
+// type AccessTokenClaims struct {
+// 	Sub  string `json:"sub"`
+// 	SID  string `json:"sid"`
+// 	Mode string `json:"mode"`
+// 	jwt.RegisteredClaims
+// }
+
+// correct access token claims as of now
 type AccessTokenClaims struct {
-	Sub  string `json:"sub"`
-	SID  string `json:"sid"`
-	Mode string `json:"mode"`
+	Sub  uuid.UUID `json:"sub"`
+	SID  uuid.UUID `json:"sid"`
+	Mode string    `json:"mode"`
 	jwt.RegisteredClaims
 }
 
-// 🚀 GenerateAccessToken creates a signed JWT token for access
-func GenerateAccessToken(userID uuid.UUID, sessionID uuid.UUID, mode string, expiryMinutes int) (string, error) {
-	now := time.Now()
+// fixed generate access token function
+func GenerateAccessToken(
+	userID uuid.UUID,
+	sessionID uuid.UUID,
+	mode string,
+	expiryMinutes int,
+) (string, error) {
+
+	now := time.Now().UTC()
+
 	claims := AccessTokenClaims{
-		Sub:  userID.String(),
-		SID:  sessionID.String(),
+		Sub:  userID,
+		SID:  sessionID,
 		Mode: mode,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -48,17 +64,41 @@ func GenerateAccessToken(userID uuid.UUID, sessionID uuid.UUID, mode string, exp
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
 	return token.SignedString(jwtSecret)
 }
 
-// 🔍 ParseAccessToken decodes and validates a JWT access token
+// // 🚀 GenerateAccessToken creates a signed JWT token for access
+// func GenerateAccessToken(userID uuid.UUID, sessionID uuid.UUID, mode string, expiryMinutes int) (string, error) {
+// 	now := time.Now()
+// 	claims := AccessTokenClaims{
+// 		Sub:  userID.String(),
+// 		SID:  sessionID.String(),
+// 		Mode: mode,
+// 		RegisteredClaims: jwt.RegisteredClaims{
+// 			IssuedAt:  jwt.NewNumericDate(now),
+// 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(expiryMinutes) * time.Minute)),
+// 		},
+// 	}
+
+// 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+// 	return token.SignedString(jwtSecret)
+// }
+
+// fixed parsedaccesstokenfunction
 func ParseAccessToken(tokenStr string) (*AccessTokenClaims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
-		return jwtSecret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&AccessTokenClaims{},
+		func(token *jwt.Token) (interface{}, error) {
+			return jwtSecret, nil
+		},
+		jwt.WithValidMethods([]string{jwt.SigningMethodHS256.Name}),
+	)
 
 	if err != nil {
-		return nil, err
+		// 🔴 This includes expiration errors
+		return nil, errors.NewAuthError("expired or invalid access token")
 	}
 
 	claims, ok := token.Claims.(*AccessTokenClaims)
@@ -68,6 +108,24 @@ func ParseAccessToken(tokenStr string) (*AccessTokenClaims, error) {
 
 	return claims, nil
 }
+
+// // 🔍 ParseAccessToken decodes and validates a JWT access token
+// func ParseAccessToken(tokenStr string) (*AccessTokenClaims, error) {
+// 	token, err := jwt.ParseWithClaims(tokenStr, &AccessTokenClaims{}, func(token *jwt.Token) (interface{}, error) {
+// 		return jwtSecret, nil
+// 	})
+
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	claims, ok := token.Claims.(*AccessTokenClaims)
+// 	if !ok || !token.Valid {
+// 		return nil, errors.NewAuthError("invalid access token")
+// 	}
+
+// 	return claims, nil
+// }
 
 // ✅ Context keys
 type ctxKey string
@@ -106,10 +164,62 @@ const (
 
 // updated version of AttachAccessToken function here
 
+// func AttachAccessToken(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+// 		authHeader := r.Header.Get("Authorization")
+// 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+// 			response.Unauthorized(w, errors.NewAuthError("missing access token"))
+// 			return
+// 		}
+
+// 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
+// 		claims, err := ParseAccessToken(rawToken)
+// 		if err != nil {
+// 			response.Unauthorized(w, errors.NewAuthError("invalid access token"))
+// 			return
+// 		}
+
+// 		ctx := context.WithValue(r.Context(), CtxUserIDKey, claims.Sub)
+// 		ctx = context.WithValue(ctx, CtxSessionIDKey, claims.SID)
+// 		ctx = context.WithValue(ctx, CtxModeKey, claims.Mode)
+
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
+
+// fixed AttachAccessToken function here
+// func AttachAccessToken(next http.Handler) http.Handler {
+// 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+// 		authHeader := r.Header.Get("Authorization")
+// 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+// 			response.Unauthorized(w, errors.NewAuthError("missing access token"))
+// 			return
+// 		}
+
+// 		rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+
+// 		claims, err := ParseAccessToken(rawToken)
+// 		if err != nil {
+// 			// 🔥 THIS is what triggers frontend refresh
+// 			response.Unauthorized(w, err)
+// 			return
+// 		}
+
+// 		ctx := context.WithValue(r.Context(), CtxUserIDKey, claims.Sub)
+// 		ctx = context.WithValue(ctx, CtxSessionIDKey, claims.SID)
+// 		ctx = context.WithValue(ctx, CtxModeKey, claims.Mode)
+
+// 		next.ServeHTTP(w, r.WithContext(ctx))
+// 	})
+// }
+
 func AttachAccessToken(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader := r.Header.Get("Authorization")
 		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+			fmt.Println("❌ Missing Authorization header")
 			response.Unauthorized(w, errors.NewAuthError("missing access token"))
 			return
 		}
@@ -118,12 +228,16 @@ func AttachAccessToken(next http.Handler) http.Handler {
 
 		claims, err := ParseAccessToken(rawToken)
 		if err != nil {
-			response.Unauthorized(w, errors.NewAuthError("invalid access token"))
+			fmt.Println("❌ Access token parse error:", err)
+			response.Unauthorized(w, err)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), CtxUserIDKey, claims.Sub)
-		ctx = context.WithValue(ctx, CtxSessionIDKey, claims.SID)
+		fmt.Println("✅ Token parsed. Sub:", claims.Sub.String(), "SID:", claims.SID.String(), "Mode:", claims.Mode)
+
+		// Add to context
+		ctx := context.WithValue(r.Context(), CtxUserIDKey, claims.Sub.String())
+		ctx = context.WithValue(ctx, CtxSessionIDKey, claims.SID.String())
 		ctx = context.WithValue(ctx, CtxModeKey, claims.Mode)
 
 		next.ServeHTTP(w, r.WithContext(ctx))
