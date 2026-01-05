@@ -302,3 +302,29 @@ func (q *Queries) GetProductVariantIndexesByCategoryIDs(ctx context.Context, dol
 	}
 	return items, nil
 }
+
+const updateProductCategory = `-- name: UpdateProductCategory :exec
+UPDATE products
+SET
+  category_id = $1,
+  updated_at  = $2
+WHERE id = $3
+  AND seller_id = $4
+`
+
+type UpdateProductCategoryParams struct {
+	CategoryID uuid.UUID `json:"category_id"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	ProductID  uuid.UUID `json:"product_id"`
+	SellerID   uuid.UUID `json:"seller_id"`
+}
+
+func (q *Queries) UpdateProductCategory(ctx context.Context, arg UpdateProductCategoryParams) error {
+	_, err := q.db.ExecContext(ctx, updateProductCategory,
+		arg.CategoryID,
+		arg.UpdatedAt,
+		arg.ProductID,
+		arg.SellerID,
+	)
+	return err
+}

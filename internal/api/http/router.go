@@ -193,6 +193,11 @@ import (
 	repo_get_all_products_seller "tanmore_backend/internal/repository/product/product_get_all_grouped"
 	get_all_products_service "tanmore_backend/internal/services/product"
 
+	// 🆕 Update Product Category
+	update_category_handlers "tanmore_backend/internal/api/http/handlers/product"
+	repo_update_category "tanmore_backend/internal/repository/product/product_update_category"
+	update_category_services "tanmore_backend/internal/services/product"
+
 	"tanmore_backend/pkg/token"
 )
 
@@ -559,6 +564,13 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	)
 	getAllProductsBySellerHandler := get_all_products_handler.NewGetAllProductsBySellerHandler(getAllProductsBySellerService)
 
+	// 🆕 Update Product Category Setup
+	productUpdateCategoryRepo := repo_update_category.NewProductUpdateCategoryRepository(db)
+	updateProductCategoryService := update_category_services.NewUpdateProductCategoryService(update_category_services.UpdateProductCategoryServiceDeps{
+		Repo: productUpdateCategoryRepo,
+	})
+	updateProductCategoryHandler := update_category_handlers.NewUpdateProductCategoryHandler(updateProductCategoryService)
+
 	r.Route("/api/media", func(r chi.Router) {
 		r.Use(token.AttachAccessToken) // ✅ Require valid access token
 
@@ -682,6 +694,9 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 		// Add inside r.Route("/api/seller") block:
 		r.Get("/products", getAllProductsBySellerHandler.Handle)
+
+		// 🆕 Update Product Category
+		r.Put("/products/{product_id}/category", updateProductCategoryHandler.Handle)
 
 	})
 

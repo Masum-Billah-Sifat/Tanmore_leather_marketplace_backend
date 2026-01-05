@@ -377,3 +377,21 @@ WHERE sellerid = $1
   AND issellerapproved = true
   AND issellerarchived = false
   AND issellerbanned = false;
+
+
+
+-- name: UpdateCategoryInProductVariantIndexes :exec
+UPDATE product_variant_indexes
+SET
+    categoryid = $1,
+    categoryname = $2,
+    updatedat = $3
+WHERE productid = $4;
+
+
+-- name: MarkProductArchivedInProductVariantIndexes :exec
+UPDATE product_variant_indexes
+SET
+    isproductarchived = true,
+    updatedat = $1
+WHERE productid = $2;

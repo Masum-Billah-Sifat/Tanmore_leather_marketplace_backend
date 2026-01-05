@@ -108,3 +108,13 @@ WHERE
     AND issellerapproved = TRUE
     AND issellerbanned = FALSE
 ORDER BY producttitle, variantid;
+
+
+
+-- name: UpdateProductCategory :exec
+UPDATE products
+SET
+  category_id = sqlc.arg(category_id),
+  updated_at  = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(product_id)
+  AND seller_id = sqlc.arg(seller_id);

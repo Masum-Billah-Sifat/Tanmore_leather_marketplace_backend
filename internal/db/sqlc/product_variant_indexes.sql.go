@@ -571,6 +571,24 @@ func (q *Queries) InsertProductVariantIndex(ctx context.Context, arg InsertProdu
 	return err
 }
 
+const markProductArchivedInProductVariantIndexes = `-- name: MarkProductArchivedInProductVariantIndexes :exec
+UPDATE product_variant_indexes
+SET
+    isproductarchived = true,
+    updatedat = $1
+WHERE productid = $2
+`
+
+type MarkProductArchivedInProductVariantIndexesParams struct {
+	Updatedat time.Time `json:"updatedat"`
+	Productid uuid.UUID `json:"productid"`
+}
+
+func (q *Queries) MarkProductArchivedInProductVariantIndexes(ctx context.Context, arg MarkProductArchivedInProductVariantIndexesParams) error {
+	_, err := q.db.ExecContext(ctx, markProductArchivedInProductVariantIndexes, arg.Updatedat, arg.Productid)
+	return err
+}
+
 const removeRetailDiscountFromIndex = `-- name: RemoveRetailDiscountFromIndex :exec
 UPDATE product_variant_indexes
 SET
@@ -628,6 +646,32 @@ func (q *Queries) RemoveWholesaleDiscountFromIndex(ctx context.Context, arg Remo
 		arg.Updatedat,
 		arg.Productid,
 		arg.Variantid,
+	)
+	return err
+}
+
+const updateCategoryInProductVariantIndexes = `-- name: UpdateCategoryInProductVariantIndexes :exec
+UPDATE product_variant_indexes
+SET
+    categoryid = $1,
+    categoryname = $2,
+    updatedat = $3
+WHERE productid = $4
+`
+
+type UpdateCategoryInProductVariantIndexesParams struct {
+	Categoryid   uuid.UUID `json:"categoryid"`
+	Categoryname string    `json:"categoryname"`
+	Updatedat    time.Time `json:"updatedat"`
+	Productid    uuid.UUID `json:"productid"`
+}
+
+func (q *Queries) UpdateCategoryInProductVariantIndexes(ctx context.Context, arg UpdateCategoryInProductVariantIndexesParams) error {
+	_, err := q.db.ExecContext(ctx, updateCategoryInProductVariantIndexes,
+		arg.Categoryid,
+		arg.Categoryname,
+		arg.Updatedat,
+		arg.Productid,
 	)
 	return err
 }

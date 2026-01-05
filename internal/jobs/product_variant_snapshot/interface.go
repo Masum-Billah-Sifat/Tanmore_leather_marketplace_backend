@@ -240,3 +240,17 @@ type VariantWholesaleDiscountRemovedEvent struct {
 	ProductID uuid.UUID `json:"product_id"`
 	VariantID uuid.UUID `json:"variant_id"`
 }
+
+// 🔁 For "product_category_updated" event
+type ProductCategoryUpdatedEvent struct {
+	ProductID       uuid.UUID `json:"product_id"`
+	SellerID        uuid.UUID `json:"seller_id"`
+	NewCategoryID   uuid.UUID `json:"new_category_id"`
+	NewCategoryName string    `json:"new_category_name"`
+}
+
+// 🔁 For "product.archived" event
+type ProductArchivedEvent struct {
+	SellerID  uuid.UUID `json:"seller_id"`
+	ProductID uuid.UUID `json:"product_id"`
+}

@@ -593,3 +593,37 @@ func processVariantWholesaleDiscountRemoved(
 		Updatedat:             timeutil.NowUTC(),
 	})
 }
+
+func processProductCategoryUpdated(
+	ctx context.Context,
+	payload []byte,
+	q *sqlc.Queries,
+) error {
+	var event ProductCategoryUpdatedEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return err
+	}
+
+	return q.UpdateCategoryInProductVariantIndexes(ctx, sqlc.UpdateCategoryInProductVariantIndexesParams{
+		Categoryid:   event.NewCategoryID,
+		Categoryname: event.NewCategoryName,
+		Updatedat:    timeutil.NowUTC(),
+		Productid:    event.ProductID,
+	})
+}
+
+func processProductArchived(
+	ctx context.Context,
+	payload []byte,
+	q *sqlc.Queries,
+) error {
+	var event ProductArchivedEvent
+	if err := json.Unmarshal(payload, &event); err != nil {
+		return err
+	}
+
+	return q.MarkProductArchivedInProductVariantIndexes(ctx, sqlc.MarkProductArchivedInProductVariantIndexesParams{
+		Updatedat: timeutil.NowUTC(),
+		Productid: event.ProductID,
+	})
+}

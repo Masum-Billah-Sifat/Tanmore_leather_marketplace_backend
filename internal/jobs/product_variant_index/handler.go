@@ -79,6 +79,12 @@ func ProcessIndexEvent(ctx context.Context, event sqlc.Event, q *sqlc.Queries) e
 	case "variant.wholesale_discount.removed":
 		return processVariantWholesaleDiscountRemoved(ctx, event.EventPayload, q)
 
+	case "product.category_updated":
+		return processProductCategoryUpdated(ctx, event.EventPayload, q)
+
+	case "product.archived":
+		return processProductArchived(ctx, event.EventPayload, q)
+
 	default:
 		return nil
 	}

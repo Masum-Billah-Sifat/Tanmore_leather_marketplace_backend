@@ -434,3 +434,19 @@ SET
 WHERE productid = sqlc.arg(productid)
   AND variantid = sqlc.arg(variantid);
 
+-- name: UpdateCategoryInProductVariantSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    categoryid = $1,
+    categoryname = $2,
+    updatedat = $3
+WHERE productid = $4;
+
+
+
+-- name: MarkProductArchivedInProductVariantSnapshots :exec
+UPDATE product_variant_snapshots
+SET
+    isproductarchived = true,
+    updatedat = $1
+WHERE productid = $2;
