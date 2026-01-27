@@ -10,6 +10,7 @@ import (
 	"database/sql"
 
 	"tanmore_backend/internal/db/sqlc"
+	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
@@ -64,12 +65,34 @@ func (r *AddToCartRepository) GetVariantSnapshotByProductIDAndVariantID(
 	return r.q.GetVariantSnapshotByProductIDAndVariantID(ctx, arg)
 }
 
-// 🛒 Find existing cart item
+// // 🛒 Find cart item by owner (user_id or guest_user_id) and variant
+// func (r *AddToCartRepository) GetCartItemByOwnerAndVariant(
+// 	ctx context.Context,
+// 	arg sqlc.GetCartItemByOwnerAndVariantParams,
+// ) (sqlc.GetCartItemByOwnerAndVariantRow, error) {
+// 	return r.q.GetCartItemByOwnerAndVariant(ctx, arg)
+// }
+
 func (r *AddToCartRepository) GetCartItemByUserAndVariant(
 	ctx context.Context,
-	arg sqlc.GetCartItemByUserAndVariantParams,
-) (sqlc.CartItem, error) {
-	return r.q.GetCartItemByUserAndVariant(ctx, arg)
+	userID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByUserAndVariantRow, error) {
+	return r.q.GetCartItemByUserAndVariant(ctx, sqlc.GetCartItemByUserAndVariantParams{
+		UserID:    sqlnull.UUID(userID),
+		VariantID: variantID,
+	})
+}
+
+func (r *AddToCartRepository) GetCartItemByGuestAndVariant(
+	ctx context.Context,
+	guestUserID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByGuestAndVariantRow, error) {
+	return r.q.GetCartItemByGuestAndVariant(ctx, sqlc.GetCartItemByGuestAndVariantParams{
+		GuestUserID: sqlnull.UUID(guestUserID),
+		VariantID:   variantID,
+	})
 }
 
 // ♻️ Reactivate an inactive cart item
@@ -84,6 +107,6 @@ func (r *AddToCartRepository) ReactivateCartItemByID(
 func (r *AddToCartRepository) InsertCartItem(
 	ctx context.Context,
 	arg sqlc.InsertCartItemParams,
-) (sqlc.CartItem, error) {
+) (sqlc.InsertCartItemRow, error) {
 	return r.q.InsertCartItem(ctx, arg)
 }

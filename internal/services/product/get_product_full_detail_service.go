@@ -30,6 +30,14 @@ type GetProductFullDetailInput struct {
 	ProductID uuid.UUID
 }
 
+type ProductMediaItem struct {
+	MediaID    uuid.UUID `json:"media_id"`
+	MediaType  string    `json:"media_type"`
+	MediaURL   string    `json:"media_url"`
+	IsPrimary  bool      `json:"is_primary"`
+	IsArchived bool      `json:"is_archived"`
+}
+
 // ------------------------------------------------------------
 // 📤 Variant Response
 
@@ -52,24 +60,27 @@ type ProductVariantResponse struct {
 	IsVariantArchived     bool      `json:"is_variant_archived"`
 }
 
-// ------------------------------------------------------------
-// 📤 Final Response
-
 type GetProductFullDetailResult struct {
-	ProductID         uuid.UUID `json:"product_id"`
-	Title             string    `json:"title"`
-	Description       string    `json:"description"`
-	CategoryID        uuid.UUID `json:"category_id"`
-	CategoryName      string    `json:"category_name"`
-	SellerID          uuid.UUID `json:"seller_id"`
-	SellerStoreName   string    `json:"seller_store_name"`
-	ImageURLs         []string  `json:"image_urls"`
-	PrimaryImageURL   *string   `json:"primary_image_url"`
-	PromoVideoURL     *string   `json:"promo_video_url"`
-	IsProductApproved bool      `json:"is_product_approved"`
+	ProductID       uuid.UUID `json:"product_id"`
+	Title           string    `json:"title"`
+	Description     string    `json:"description"`
+	CategoryID      uuid.UUID `json:"category_id"`
+	CategoryName    string    `json:"category_name"`
+	SellerID        uuid.UUID `json:"seller_id"`
+	SellerStoreName string    `json:"seller_store_name"`
 
-	ValidVariants    []ProductVariantResponse `json:"valid_variants"`
-	ArchivedVariants []ProductVariantResponse `json:"archived_variants"`
+	// 🖼️ Images
+	ImageMediaItems         []ProductMediaItem `json:"image_media_items"`
+	ArchivedImageMediaItems []ProductMediaItem `json:"archived_image_media_items"`
+	PrimaryImageItem        ProductMediaItem   `json:"primary_image_item"`
+
+	// 🎥 Promo Videos
+	PromoVideoItem               *ProductMediaItem  `json:"promo_video_item,omitempty"`
+	ArchivedPromoVideoMediaItems []ProductMediaItem `json:"archived_promo_video_media_items"`
+
+	IsProductApproved bool                     `json:"is_product_approved"`
+	ValidVariants     []ProductVariantResponse `json:"valid_variants"`
+	ArchivedVariants  []ProductVariantResponse `json:"archived_variants"`
 }
 
 // ------------------------------------------------------------
@@ -144,25 +155,76 @@ func (s *GetProductFullDetailService) Start(
 	}
 
 	// ------------------------------------------------------------
-	// Step 4: Fetch primary image (optional)
+	// Step 4: Fetch all media for product
 
-	var primaryImageURL *string
-
-	media, err := s.Deps.Repo.GetPrimaryImageForProduct(
-		ctx,
-		sqlc.GetPrimaryProductImageByProductIDParams{
-			ProductID:  input.ProductID,
-			MediaType:  "image",
-			IsPrimary:  true,
-			IsArchived: false,
-		},
-	)
-	if err == nil {
-		primaryImageURL = &media.MediaUrl
+	allMedias, err := s.Deps.Repo.GetAllMediaForProduct(ctx, input.ProductID)
+	if err != nil {
+		return nil, errors.NewTableError("product_medias.select", err.Error())
 	}
 
-	// ------------------------------------------------------------
-	// Step 5: Group variants
+	var (
+		imageMediaItems         []ProductMediaItem
+		archivedImageMediaItems []ProductMediaItem
+		archivedPromoVideos     []ProductMediaItem
+
+		primaryImageItem *ProductMediaItem
+		promoVideoItem   *ProductMediaItem
+	)
+
+	for _, m := range allMedias {
+		item := ProductMediaItem{
+			MediaID:    m.ID,
+			MediaType:  m.MediaType,
+			MediaURL:   m.MediaUrl,
+			IsPrimary:  m.IsPrimary,
+			IsArchived: m.IsArchived,
+		}
+
+		switch m.MediaType {
+
+		// ---------------- Images ----------------
+		case "image":
+			if m.IsArchived {
+				archivedImageMediaItems = append(archivedImageMediaItems, item)
+				continue
+			}
+
+			imageMediaItems = append(imageMediaItems, item)
+
+			if m.IsPrimary {
+				if primaryImageItem != nil {
+					return nil, errors.NewValidationError(
+						"product_media",
+						"multiple active primary images found",
+					)
+				}
+				primaryImageItem = &item
+			}
+
+		// ---------------- Videos ----------------
+		case "video":
+			if m.IsArchived {
+				archivedPromoVideos = append(archivedPromoVideos, item)
+				continue
+			}
+
+			if promoVideoItem != nil {
+				return nil, errors.NewValidationError(
+					"product_media",
+					"multiple active promo videos found",
+				)
+			}
+			promoVideoItem = &item
+		}
+	}
+
+	// 🔐 Enforce required invariants
+	if primaryImageItem == nil {
+		return nil, errors.NewValidationError(
+			"product_media",
+			"no active primary image found",
+		)
+	}
 
 	var validVariants []ProductVariantResponse
 	var archivedVariants []ProductVariantResponse
@@ -209,19 +271,23 @@ func (s *GetProductFullDetailService) Start(
 	first := variants[0]
 
 	return &GetProductFullDetailResult{
-		ProductID:         product.ID,
-		Title:             product.Title,
-		Description:       product.Description,
-		CategoryID:        first.Categoryid,
-		CategoryName:      first.Categoryname,
-		SellerID:          user.ID,
-		SellerStoreName:   first.Sellerstorename,
-		ImageURLs:         first.Productimages,
-		PrimaryImageURL:   primaryImageURL,
-		PromoVideoURL:     sqlnull.ToStringPtr(first.Productpromovideourl),
-		IsProductApproved: product.IsApproved,
+		ProductID:       product.ID,
+		Title:           product.Title,
+		Description:     product.Description,
+		CategoryID:      first.Categoryid,
+		CategoryName:    first.Categoryname,
+		SellerID:        user.ID,
+		SellerStoreName: first.Sellerstorename,
 
-		ValidVariants:    validVariants,
-		ArchivedVariants: archivedVariants,
+		ImageMediaItems:              imageMediaItems,
+		ArchivedImageMediaItems:      archivedImageMediaItems,
+		PrimaryImageItem:             *primaryImageItem,
+		PromoVideoItem:               promoVideoItem,
+		ArchivedPromoVideoMediaItems: archivedPromoVideos,
+
+		IsProductApproved: product.IsApproved,
+		ValidVariants:     validVariants,
+		ArchivedVariants:  archivedVariants,
 	}, nil
+
 }

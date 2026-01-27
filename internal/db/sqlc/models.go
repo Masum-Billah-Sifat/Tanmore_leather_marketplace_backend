@@ -10,16 +10,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/sqlc-dev/pqtype"
 )
 
 type CartItem struct {
 	ID               uuid.UUID     `json:"id"`
-	UserID           uuid.UUID     `json:"user_id"`
+	UserID           uuid.NullUUID `json:"user_id"`
 	VariantID        uuid.UUID     `json:"variant_id"`
 	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
 	IsActive         bool          `json:"is_active"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
+	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
+	IsDeprecated     bool          `json:"is_deprecated"`
 }
 
 type Category struct {
@@ -34,39 +37,45 @@ type Category struct {
 }
 
 type CheckoutItem struct {
-	ID                     uuid.UUID `json:"id"`
-	CheckoutSessionID      uuid.UUID `json:"checkout_session_id"`
-	UserID                 uuid.UUID `json:"user_id"`
-	SellerID               uuid.UUID `json:"seller_id"`
-	CategoryID             uuid.UUID `json:"category_id"`
-	CategoryName           string    `json:"category_name"`
-	ProductID              uuid.UUID `json:"product_id"`
-	ProductTitle           string    `json:"product_title"`
-	ProductDescription     string    `json:"product_description"`
-	ProductPrimaryImageUrl string    `json:"product_primary_image_url"`
-	VariantID              uuid.UUID `json:"variant_id"`
-	Color                  string    `json:"color"`
-	Size                   string    `json:"size"`
-	BuyingMode             string    `json:"buying_mode"`
-	UnitPrice              string    `json:"unit_price"`
-	HasDiscount            bool      `json:"has_discount"`
-	DiscountType           string    `json:"discount_type"`
-	DiscountValue          string    `json:"discount_value"`
-	RequiredQuantity       int32     `json:"required_quantity"`
-	WeightGrams            int32     `json:"weight_grams"`
-	CreatedAt              time.Time `json:"created_at"`
-	SellerStoreName        string    `json:"seller_store_name"`
+	ID                     uuid.UUID      `json:"id"`
+	CheckoutSessionID      uuid.UUID      `json:"checkout_session_id"`
+	UserID                 uuid.UUID      `json:"user_id"`
+	SellerID               uuid.UUID      `json:"seller_id"`
+	CategoryID             uuid.UUID      `json:"category_id"`
+	CategoryName           string         `json:"category_name"`
+	ProductID              uuid.UUID      `json:"product_id"`
+	ProductTitle           string         `json:"product_title"`
+	ProductDescription     string         `json:"product_description"`
+	ProductPrimaryImageUrl string         `json:"product_primary_image_url"`
+	VariantID              uuid.UUID      `json:"variant_id"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	BuyingMode             string         `json:"buying_mode"`
+	UnitPrice              string         `json:"unit_price"`
+	HasDiscount            bool           `json:"has_discount"`
+	DiscountType           sql.NullString `json:"discount_type"`
+	DiscountValue          sql.NullString `json:"discount_value"`
+	RequiredQuantity       int32          `json:"required_quantity"`
+	WeightGrams            int32          `json:"weight_grams"`
+	CreatedAt              time.Time      `json:"created_at"`
+	SellerStoreName        string         `json:"seller_store_name"`
 }
 
 type CheckoutSession struct {
-	ID                uuid.UUID      `json:"id"`
-	UserID            uuid.UUID      `json:"user_id"`
-	Subtotal          string         `json:"subtotal"`
-	TotalWeightGrams  int32          `json:"total_weight_grams"`
-	DeliveryCharge    sql.NullString `json:"delivery_charge"`
-	TotalPayable      string         `json:"total_payable"`
-	ShippingAddressID uuid.NullUUID  `json:"shipping_address_id"`
-	CreatedAt         time.Time      `json:"created_at"`
+	ID                            uuid.UUID      `json:"id"`
+	UserID                        uuid.UUID      `json:"user_id"`
+	Subtotal                      string         `json:"subtotal"`
+	TotalWeightGrams              int32          `json:"total_weight_grams"`
+	DeliveryCharge                sql.NullString `json:"delivery_charge"`
+	TotalPayable                  string         `json:"total_payable"`
+	ShippingAddressID             uuid.NullUUID  `json:"shipping_address_id"`
+	CreatedAt                     time.Time      `json:"created_at"`
+	Status                        string         `json:"status"`
+	PlatformDiscountType          sql.NullString `json:"platform_discount_type"`
+	PlatformDiscountValue         sql.NullString `json:"platform_discount_value"`
+	PlatformDiscountAmountApplied sql.NullString `json:"platform_discount_amount_applied"`
+	IsPlatformDiscountApplied     bool           `json:"is_platform_discount_applied"`
+	PaymentMethod                 string         `json:"payment_method"`
 }
 
 type Event struct {
@@ -76,6 +85,89 @@ type Event struct {
 	EventPayload json.RawMessage `json:"event_payload"`
 	DispatchedAt sql.NullTime    `json:"dispatched_at"`
 	CreatedAt    time.Time       `json:"created_at"`
+}
+
+type Order struct {
+	ID                            uuid.UUID      `json:"id"`
+	UserID                        uuid.UUID      `json:"user_id"`
+	CheckoutSessionID             uuid.UUID      `json:"checkout_session_id"`
+	OrderCode                     string         `json:"order_code"`
+	Subtotal                      string         `json:"subtotal"`
+	ShippingFee                   sql.NullString `json:"shipping_fee"`
+	TotalAmount                   string         `json:"total_amount"`
+	Currency                      sql.NullString `json:"currency"`
+	PaymentMethod                 string         `json:"payment_method"`
+	PaymentStatus                 sql.NullString `json:"payment_status"`
+	LatestPaymentID               uuid.NullUUID  `json:"latest_payment_id"`
+	Status                        sql.NullString `json:"status"`
+	PlatformDiscountType          sql.NullString `json:"platform_discount_type"`
+	PlatformDiscountValue         sql.NullString `json:"platform_discount_value"`
+	PlatformDiscountAmountApplied sql.NullString `json:"platform_discount_amount_applied"`
+	IsPlatformDiscountApplied     bool           `json:"is_platform_discount_applied"`
+	CreatedAt                     sql.NullTime   `json:"created_at"`
+	UpdatedAt                     sql.NullTime   `json:"updated_at"`
+}
+
+type OrderItem struct {
+	ID                     uuid.UUID      `json:"id"`
+	OrderID                uuid.UUID      `json:"order_id"`
+	CustomerID             uuid.UUID      `json:"customer_id"`
+	SellerID               uuid.UUID      `json:"seller_id"`
+	CategoryID             uuid.UUID      `json:"category_id"`
+	CategoryName           string         `json:"category_name"`
+	ProductID              uuid.UUID      `json:"product_id"`
+	ProductTitle           string         `json:"product_title"`
+	ProductDescription     string         `json:"product_description"`
+	ProductPrimaryImageUrl string         `json:"product_primary_image_url"`
+	VariantID              uuid.UUID      `json:"variant_id"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	BuyingMode             string         `json:"buying_mode"`
+	UnitPrice              string         `json:"unit_price"`
+	Quantity               int32          `json:"quantity"`
+	TotalPrice             string         `json:"total_price"`
+	HasDiscount            bool           `json:"has_discount"`
+	DiscountType           sql.NullString `json:"discount_type"`
+	DiscountValue          sql.NullString `json:"discount_value"`
+	WeightGramsPerUnit     int32          `json:"weight_grams_per_unit"`
+	TotalWeightGrams       int32          `json:"total_weight_grams"`
+	SellerStoreName        string         `json:"seller_store_name"`
+	CreatedAt              time.Time      `json:"created_at"`
+}
+
+type Payment struct {
+	ID                 uuid.UUID             `json:"id"`
+	OrderID            uuid.NullUUID         `json:"order_id"`
+	SslSessionID       sql.NullString        `json:"ssl_session_id"`
+	SslTrxID           sql.NullString        `json:"ssl_trx_id"`
+	BankTrxID          sql.NullString        `json:"bank_trx_id"`
+	Amount             string                `json:"amount"`
+	Currency           sql.NullString        `json:"currency"`
+	PaymentMethod      sql.NullString        `json:"payment_method"`
+	Status             sql.NullString        `json:"status"`
+	RiskLevel          sql.NullString        `json:"risk_level"`
+	GatewayResponse    pqtype.NullRawMessage `json:"gateway_response"`
+	ValidationResponse pqtype.NullRawMessage `json:"validation_response"`
+	CreatedAt          sql.NullTime          `json:"created_at"`
+	UpdatedAt          sql.NullTime          `json:"updated_at"`
+}
+
+type PlatformPromotion struct {
+	ID             uuid.UUID      `json:"id"`
+	Title          string         `json:"title"`
+	Description    sql.NullString `json:"description"`
+	DiscountType   string         `json:"discount_type"`
+	DiscountValue  string         `json:"discount_value"`
+	MinCartValue   sql.NullString `json:"min_cart_value"`
+	MaxCartValue   sql.NullString `json:"max_cart_value"`
+	MaxDiscountCap sql.NullString `json:"max_discount_cap"`
+	StartTime      time.Time      `json:"start_time"`
+	EndTime        time.Time      `json:"end_time"`
+	IsActive       bool           `json:"is_active"`
+	IsArchived     bool           `json:"is_archived"`
+	Priority       int32          `json:"priority"`
+	CreatedAt      sql.NullTime   `json:"created_at"`
+	UpdatedAt      sql.NullTime   `json:"updated_at"`
 }
 
 type Product struct {
@@ -244,19 +336,19 @@ type SellerProfileMetadatum struct {
 }
 
 type ShippingAddress struct {
-	ID             uuid.UUID      `json:"id"`
-	UserID         uuid.UUID      `json:"user_id"`
-	RecipientName  string         `json:"recipient_name"`
-	RecipientPhone string         `json:"recipient_phone"`
-	RecipientEmail sql.NullString `json:"recipient_email"`
-	AddressLine    string         `json:"address_line"`
-	DeliveryNote   sql.NullString `json:"delivery_note"`
-	CityID         int32          `json:"city_id"`
-	ZoneID         int32          `json:"zone_id"`
-	AreaID         int32          `json:"area_id"`
-	Latitude       sql.NullString `json:"latitude"`
-	Longitude      sql.NullString `json:"longitude"`
-	CreatedAt      time.Time      `json:"created_at"`
+	ID                uuid.UUID      `json:"id"`
+	CheckoutSessionID uuid.UUID      `json:"checkout_session_id"`
+	RecipientName     string         `json:"recipient_name"`
+	RecipientPhone    string         `json:"recipient_phone"`
+	RecipientEmail    sql.NullString `json:"recipient_email"`
+	AddressLine       string         `json:"address_line"`
+	DeliveryNote      sql.NullString `json:"delivery_note"`
+	CityID            int32          `json:"city_id"`
+	ZoneID            int32          `json:"zone_id"`
+	AreaID            int32          `json:"area_id"`
+	Latitude          sql.NullString `json:"latitude"`
+	Longitude         sql.NullString `json:"longitude"`
+	CreatedAt         sql.NullTime   `json:"created_at"`
 }
 
 type User struct {

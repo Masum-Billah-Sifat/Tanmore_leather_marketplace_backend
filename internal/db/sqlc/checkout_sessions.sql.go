@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 )
 
-const insertCheckoutSession = `-- name: InsertCheckoutSession :one
-INSERT INTO checkout_sessions (
+const getCheckoutSessionByID = `-- name: GetCheckoutSessionByID :one
+SELECT
     id,
     user_id,
     subtotal,
@@ -22,51 +22,19 @@ INSERT INTO checkout_sessions (
     delivery_charge,
     total_payable,
     shipping_address_id,
-    created_at
-)
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6,
-    $7,
-    $8
-)
-RETURNING
-    id,
-    user_id,
-    subtotal,
-    total_weight_grams,
-    delivery_charge,
-    total_payable,
-    shipping_address_id,
-    created_at
+    created_at,
+    status,
+    platform_discount_type,
+    platform_discount_value,
+    platform_discount_amount_applied,
+    is_platform_discount_applied,
+    payment_method
+FROM checkout_sessions
+WHERE id = $1
 `
 
-type InsertCheckoutSessionParams struct {
-	ID                uuid.UUID      `json:"id"`
-	UserID            uuid.UUID      `json:"user_id"`
-	Subtotal          string         `json:"subtotal"`
-	TotalWeightGrams  int32          `json:"total_weight_grams"`
-	DeliveryCharge    sql.NullString `json:"delivery_charge"`
-	TotalPayable      string         `json:"total_payable"`
-	ShippingAddressID uuid.NullUUID  `json:"shipping_address_id"`
-	CreatedAt         time.Time      `json:"created_at"`
-}
-
-func (q *Queries) InsertCheckoutSession(ctx context.Context, arg InsertCheckoutSessionParams) (CheckoutSession, error) {
-	row := q.db.QueryRowContext(ctx, insertCheckoutSession,
-		arg.ID,
-		arg.UserID,
-		arg.Subtotal,
-		arg.TotalWeightGrams,
-		arg.DeliveryCharge,
-		arg.TotalPayable,
-		arg.ShippingAddressID,
-		arg.CreatedAt,
-	)
+func (q *Queries) GetCheckoutSessionByID(ctx context.Context, id uuid.UUID) (CheckoutSession, error) {
+	row := q.db.QueryRowContext(ctx, getCheckoutSessionByID, id)
 	var i CheckoutSession
 	err := row.Scan(
 		&i.ID,
@@ -77,6 +45,194 @@ func (q *Queries) InsertCheckoutSession(ctx context.Context, arg InsertCheckoutS
 		&i.TotalPayable,
 		&i.ShippingAddressID,
 		&i.CreatedAt,
+		&i.Status,
+		&i.PlatformDiscountType,
+		&i.PlatformDiscountValue,
+		&i.PlatformDiscountAmountApplied,
+		&i.IsPlatformDiscountApplied,
+		&i.PaymentMethod,
 	)
 	return i, err
+}
+
+const insertCheckoutSession = `-- name: InsertCheckoutSession :one
+
+
+INSERT INTO checkout_sessions (
+    id,
+    user_id,
+    subtotal,
+    total_weight_grams,
+    delivery_charge,
+    total_payable,
+    shipping_address_id,
+    status,
+    platform_discount_type,
+    platform_discount_value,
+    platform_discount_amount_applied,
+    is_platform_discount_applied,
+    payment_method,
+    created_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13, $14
+)
+RETURNING id
+`
+
+type InsertCheckoutSessionParams struct {
+	ID                            uuid.UUID      `json:"id"`
+	UserID                        uuid.UUID      `json:"user_id"`
+	Subtotal                      string         `json:"subtotal"`
+	TotalWeightGrams              int32          `json:"total_weight_grams"`
+	DeliveryCharge                sql.NullString `json:"delivery_charge"`
+	TotalPayable                  string         `json:"total_payable"`
+	ShippingAddressID             uuid.NullUUID  `json:"shipping_address_id"`
+	Status                        string         `json:"status"`
+	PlatformDiscountType          sql.NullString `json:"platform_discount_type"`
+	PlatformDiscountValue         sql.NullString `json:"platform_discount_value"`
+	PlatformDiscountAmountApplied sql.NullString `json:"platform_discount_amount_applied"`
+	IsPlatformDiscountApplied     bool           `json:"is_platform_discount_applied"`
+	PaymentMethod                 string         `json:"payment_method"`
+	CreatedAt                     time.Time      `json:"created_at"`
+}
+
+// -- name: InsertCheckoutSession :one
+// INSERT INTO checkout_sessions (
+//
+//	id,
+//	user_id,
+//	subtotal,
+//	total_weight_grams,
+//	delivery_charge,
+//	total_payable,
+//	shipping_address_id,
+//	created_at
+//
+// )
+// VALUES (
+//
+//	sqlc.arg(id),
+//	sqlc.arg(user_id),
+//	sqlc.arg(subtotal),
+//	sqlc.arg(total_weight_grams),
+//	sqlc.arg(delivery_charge),
+//	sqlc.arg(total_payable),
+//	sqlc.arg(shipping_address_id),
+//	sqlc.arg(created_at)
+//
+// )
+// RETURNING
+//
+//	id,
+//	user_id,
+//	subtotal,
+//	total_weight_grams,
+//	delivery_charge,
+//	total_payable,
+//	shipping_address_id,
+//	created_at;
+func (q *Queries) InsertCheckoutSession(ctx context.Context, arg InsertCheckoutSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, insertCheckoutSession,
+		arg.ID,
+		arg.UserID,
+		arg.Subtotal,
+		arg.TotalWeightGrams,
+		arg.DeliveryCharge,
+		arg.TotalPayable,
+		arg.ShippingAddressID,
+		arg.Status,
+		arg.PlatformDiscountType,
+		arg.PlatformDiscountValue,
+		arg.PlatformDiscountAmountApplied,
+		arg.IsPlatformDiscountApplied,
+		arg.PaymentMethod,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const updateCheckoutSessionDeliveryPricing = `-- name: UpdateCheckoutSessionDeliveryPricing :exec
+UPDATE checkout_sessions
+SET
+    delivery_charge = $1,
+    total_payable = $2
+WHERE id = $3
+`
+
+type UpdateCheckoutSessionDeliveryPricingParams struct {
+	DeliveryCharge sql.NullString `json:"delivery_charge"`
+	TotalPayable   string         `json:"total_payable"`
+	ID             uuid.UUID      `json:"id"`
+}
+
+func (q *Queries) UpdateCheckoutSessionDeliveryPricing(ctx context.Context, arg UpdateCheckoutSessionDeliveryPricingParams) error {
+	_, err := q.db.ExecContext(ctx, updateCheckoutSessionDeliveryPricing, arg.DeliveryCharge, arg.TotalPayable, arg.ID)
+	return err
+}
+
+const updateCheckoutSessionPaymentMethod = `-- name: UpdateCheckoutSessionPaymentMethod :exec
+UPDATE checkout_sessions
+SET
+    payment_method = $1
+WHERE id = $2
+`
+
+type UpdateCheckoutSessionPaymentMethodParams struct {
+	PaymentMethod string    `json:"payment_method"`
+	ID            uuid.UUID `json:"id"`
+}
+
+func (q *Queries) UpdateCheckoutSessionPaymentMethod(ctx context.Context, arg UpdateCheckoutSessionPaymentMethodParams) error {
+	_, err := q.db.ExecContext(ctx, updateCheckoutSessionPaymentMethod, arg.PaymentMethod, arg.ID)
+	return err
+}
+
+const updateCheckoutSessionStatusToOrderCreated = `-- name: UpdateCheckoutSessionStatusToOrderCreated :exec
+UPDATE checkout_sessions
+SET
+    status = $2
+WHERE id = $1
+`
+
+type UpdateCheckoutSessionStatusToOrderCreatedParams struct {
+	ID     uuid.UUID `json:"id"`
+	Status string    `json:"status"`
+}
+
+func (q *Queries) UpdateCheckoutSessionStatusToOrderCreated(ctx context.Context, arg UpdateCheckoutSessionStatusToOrderCreatedParams) error {
+	_, err := q.db.ExecContext(ctx, updateCheckoutSessionStatusToOrderCreated, arg.ID, arg.Status)
+	return err
+}
+
+const updateCheckoutSessionWithShipping = `-- name: UpdateCheckoutSessionWithShipping :exec
+UPDATE checkout_sessions
+SET
+    shipping_address_id = $1,
+    payment_method = $2,
+    delivery_charge = $3,
+    total_payable = $4
+WHERE id = $5
+`
+
+type UpdateCheckoutSessionWithShippingParams struct {
+	ShippingAddressID uuid.NullUUID  `json:"shipping_address_id"`
+	PaymentMethod     string         `json:"payment_method"`
+	DeliveryCharge    sql.NullString `json:"delivery_charge"`
+	TotalPayable      string         `json:"total_payable"`
+	ID                uuid.UUID      `json:"id"`
+}
+
+func (q *Queries) UpdateCheckoutSessionWithShipping(ctx context.Context, arg UpdateCheckoutSessionWithShippingParams) error {
+	_, err := q.db.ExecContext(ctx, updateCheckoutSessionWithShipping,
+		arg.ShippingAddressID,
+		arg.PaymentMethod,
+		arg.DeliveryCharge,
+		arg.TotalPayable,
+		arg.ID,
+	)
+	return err
 }

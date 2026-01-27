@@ -95,3 +95,11 @@ func (r *ProductGetFullDetailRepository) GetPrimaryImageForProduct(
 ) (sqlc.ProductMedia, error) {
 	return r.q.GetPrimaryProductImageByProductID(ctx, arg)
 }
+
+// 🧾 Get all media (images/videos) for a product
+func (r *ProductGetFullDetailRepository) GetAllMediaForProduct(
+	ctx context.Context,
+	productID uuid.UUID,
+) ([]sqlc.GetAllMediaForProductRow, error) {
+	return r.q.GetAllMediaForProduct(ctx, productID)
+}

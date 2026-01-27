@@ -93,3 +93,16 @@ WHERE product_id = $1 AND media_type = $2 AND is_archived = $3;
 UPDATE product_medias
 SET is_primary = $4
 WHERE id = $1 AND product_id = $2 AND media_type = $3;
+
+
+
+-- name: GetAllMediaForProduct :many
+SELECT
+    id,
+    product_id,
+    media_type,
+    media_url,
+    is_primary,
+    is_archived
+FROM product_medias
+WHERE product_id = $1;

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 )
 
 const applyRetailDiscountToSnapshot = `-- name: ApplyRetailDiscountToSnapshot :exec
@@ -183,6 +184,142 @@ func (q *Queries) EnableWholesaleModeInSnapshots(ctx context.Context, arg Enable
 		arg.Variantid,
 	)
 	return err
+}
+
+const getProductVariantSnapshotsByVariantIDs = `-- name: GetProductVariantSnapshotsByVariantIDs :many
+SELECT
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    weight_grams,
+
+    -- parent info
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl
+FROM product_variant_snapshots
+WHERE variantid = ANY($1::uuid[])
+`
+
+type GetProductVariantSnapshotsByVariantIDsRow struct {
+	Variantid              uuid.UUID      `json:"variantid"`
+	Isvariantarchived      bool           `json:"isvariantarchived"`
+	Isvariantinstock       bool           `json:"isvariantinstock"`
+	Stockamount            int32          `json:"stockamount"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	Retailprice            int64          `json:"retailprice"`
+	Hasretaildiscount      bool           `json:"hasretaildiscount"`
+	Retaildiscounttype     sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount         sql.NullInt64  `json:"retaildiscount"`
+	Haswholesaleenabled    bool           `json:"haswholesaleenabled"`
+	Wholesaleprice         sql.NullInt64  `json:"wholesaleprice"`
+	Wholesaleminquantity   sql.NullInt32  `json:"wholesaleminquantity"`
+	Haswholesalediscount   bool           `json:"haswholesalediscount"`
+	Wholesalediscounttype  sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount      sql.NullInt64  `json:"wholesalediscount"`
+	WeightGrams            int32          `json:"weight_grams"`
+	Categoryid             uuid.UUID      `json:"categoryid"`
+	Iscategoryarchived     bool           `json:"iscategoryarchived"`
+	Categoryname           string         `json:"categoryname"`
+	Sellerid               uuid.UUID      `json:"sellerid"`
+	Issellerapproved       bool           `json:"issellerapproved"`
+	Issellerarchived       bool           `json:"issellerarchived"`
+	Issellerbanned         bool           `json:"issellerbanned"`
+	Sellerstorename        string         `json:"sellerstorename"`
+	Productid              uuid.UUID      `json:"productid"`
+	Isproductapproved      bool           `json:"isproductapproved"`
+	Isproductarchived      bool           `json:"isproductarchived"`
+	Isproductbanned        bool           `json:"isproductbanned"`
+	Producttitle           string         `json:"producttitle"`
+	Productdescription     string         `json:"productdescription"`
+	Productprimaryimageurl string         `json:"productprimaryimageurl"`
+}
+
+func (q *Queries) GetProductVariantSnapshotsByVariantIDs(ctx context.Context, dollar_1 []uuid.UUID) ([]GetProductVariantSnapshotsByVariantIDsRow, error) {
+	rows, err := q.db.QueryContext(ctx, getProductVariantSnapshotsByVariantIDs, pq.Array(dollar_1))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetProductVariantSnapshotsByVariantIDsRow
+	for rows.Next() {
+		var i GetProductVariantSnapshotsByVariantIDsRow
+		if err := rows.Scan(
+			&i.Variantid,
+			&i.Isvariantarchived,
+			&i.Isvariantinstock,
+			&i.Stockamount,
+			&i.Color,
+			&i.Size,
+			&i.Retailprice,
+			&i.Hasretaildiscount,
+			&i.Retaildiscounttype,
+			&i.Retaildiscount,
+			&i.Haswholesaleenabled,
+			&i.Wholesaleprice,
+			&i.Wholesaleminquantity,
+			&i.Haswholesalediscount,
+			&i.Wholesalediscounttype,
+			&i.Wholesalediscount,
+			&i.WeightGrams,
+			&i.Categoryid,
+			&i.Iscategoryarchived,
+			&i.Categoryname,
+			&i.Sellerid,
+			&i.Issellerapproved,
+			&i.Issellerarchived,
+			&i.Issellerbanned,
+			&i.Sellerstorename,
+			&i.Productid,
+			&i.Isproductapproved,
+			&i.Isproductarchived,
+			&i.Isproductbanned,
+			&i.Producttitle,
+			&i.Productdescription,
+			&i.Productprimaryimageurl,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const getVariantSnapshot = `-- name: GetVariantSnapshot :one

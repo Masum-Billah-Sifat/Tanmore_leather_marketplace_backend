@@ -285,6 +285,155 @@ func (q *Queries) GetAllProductVariantIndexesBySeller(ctx context.Context, selle
 	return items, nil
 }
 
+const getProductDetailByProductID = `-- name: GetProductDetailByProductID :many
+SELECT
+    id,
+
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productimages,
+    productpromovideourl,
+
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    retaildiscounttype,
+    retaildiscount,
+    has_retail_discount,
+
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    weight_grams,
+    views,
+    createdat,
+    updatedat
+FROM product_variant_indexes
+WHERE
+    productid = $1
+`
+
+type GetProductDetailByProductIDRow struct {
+	ID                    uuid.UUID      `json:"id"`
+	Categoryid            uuid.UUID      `json:"categoryid"`
+	Iscategoryarchived    bool           `json:"iscategoryarchived"`
+	Categoryname          string         `json:"categoryname"`
+	Sellerid              uuid.UUID      `json:"sellerid"`
+	Issellerapproved      bool           `json:"issellerapproved"`
+	Issellerarchived      bool           `json:"issellerarchived"`
+	Issellerbanned        bool           `json:"issellerbanned"`
+	Sellerstorename       string         `json:"sellerstorename"`
+	Productid             uuid.UUID      `json:"productid"`
+	Isproductapproved     bool           `json:"isproductapproved"`
+	Isproductarchived     bool           `json:"isproductarchived"`
+	Isproductbanned       bool           `json:"isproductbanned"`
+	Producttitle          string         `json:"producttitle"`
+	Productdescription    string         `json:"productdescription"`
+	Productimages         []string       `json:"productimages"`
+	Productpromovideourl  sql.NullString `json:"productpromovideourl"`
+	Variantid             uuid.UUID      `json:"variantid"`
+	Isvariantarchived     bool           `json:"isvariantarchived"`
+	Isvariantinstock      bool           `json:"isvariantinstock"`
+	Stockamount           int32          `json:"stockamount"`
+	Color                 string         `json:"color"`
+	Size                  string         `json:"size"`
+	Retailprice           int64          `json:"retailprice"`
+	Retaildiscounttype    sql.NullString `json:"retaildiscounttype"`
+	Retaildiscount        sql.NullInt64  `json:"retaildiscount"`
+	HasRetailDiscount     bool           `json:"has_retail_discount"`
+	Haswholesaleenabled   bool           `json:"haswholesaleenabled"`
+	Wholesaleprice        sql.NullInt64  `json:"wholesaleprice"`
+	Wholesaleminquantity  sql.NullInt32  `json:"wholesaleminquantity"`
+	Wholesalediscounttype sql.NullString `json:"wholesalediscounttype"`
+	Wholesalediscount     sql.NullInt64  `json:"wholesalediscount"`
+	WeightGrams           int32          `json:"weight_grams"`
+	Views                 int64          `json:"views"`
+	Createdat             time.Time      `json:"createdat"`
+	Updatedat             time.Time      `json:"updatedat"`
+}
+
+func (q *Queries) GetProductDetailByProductID(ctx context.Context, productid uuid.UUID) ([]GetProductDetailByProductIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getProductDetailByProductID, productid)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetProductDetailByProductIDRow
+	for rows.Next() {
+		var i GetProductDetailByProductIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Categoryid,
+			&i.Iscategoryarchived,
+			&i.Categoryname,
+			&i.Sellerid,
+			&i.Issellerapproved,
+			&i.Issellerarchived,
+			&i.Issellerbanned,
+			&i.Sellerstorename,
+			&i.Productid,
+			&i.Isproductapproved,
+			&i.Isproductarchived,
+			&i.Isproductbanned,
+			&i.Producttitle,
+			&i.Productdescription,
+			pq.Array(&i.Productimages),
+			&i.Productpromovideourl,
+			&i.Variantid,
+			&i.Isvariantarchived,
+			&i.Isvariantinstock,
+			&i.Stockamount,
+			&i.Color,
+			&i.Size,
+			&i.Retailprice,
+			&i.Retaildiscounttype,
+			&i.Retaildiscount,
+			&i.HasRetailDiscount,
+			&i.Haswholesaleenabled,
+			&i.Wholesaleprice,
+			&i.Wholesaleminquantity,
+			&i.Wholesalediscounttype,
+			&i.Wholesalediscount,
+			&i.WeightGrams,
+			&i.Views,
+			&i.Createdat,
+			&i.Updatedat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getVariantIndexesByProductAndSeller = `-- name: GetVariantIndexesByProductAndSeller :many
 SELECT
   id,

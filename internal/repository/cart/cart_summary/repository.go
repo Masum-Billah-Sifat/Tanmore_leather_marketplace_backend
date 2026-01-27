@@ -1,9 +1,3 @@
-// ------------------------------------------------------------
-// 📁 File: internal/repository/cart/cart_summary/cart_summary_repository.go
-// 🧠 Concrete implementation of CartSummaryRepoInterface.
-//     - Validates customer moderation status
-//     - Retrieves enriched cart+snapshot rows for variant_ids
-
 package cart_summary
 
 import (
@@ -57,10 +51,24 @@ func (r *CartSummaryRepository) GetUserByID(
 	return r.q.GetUserByID(ctx, userID)
 }
 
-// 🛒 Fetch cart + snapshot rows for selected variant IDs
+// // 🛒 Fetch cart + snapshot rows for selected variant IDs (user OR guest)
+// func (r *CartSummaryRepository) GetActiveCartVariantSnapshotsByOwnerAndVariantIDs(
+// 	ctx context.Context,
+// 	arg sqlc.GetActiveCartVariantSnapshotsByOwnerAndVariantIDsParams,
+// ) ([]sqlc.GetActiveCartVariantSnapshotsByOwnerAndVariantIDsRow, error) {
+// 	return r.q.GetActiveCartVariantSnapshotsByOwnerAndVariantIDs(ctx, arg)
+// }
+
 func (r *CartSummaryRepository) GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 	ctx context.Context,
 	arg sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams,
 ) ([]sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow, error) {
 	return r.q.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, arg)
+}
+
+func (r *CartSummaryRepository) GetActiveCartVariantSnapshotsByGuestAndVariantIDs(
+	ctx context.Context,
+	arg sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams,
+) ([]sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow, error) {
+	return r.q.GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx, arg)
 }

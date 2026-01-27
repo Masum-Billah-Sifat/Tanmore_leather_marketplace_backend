@@ -7,18 +7,130 @@ package sqlc
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/google/uuid"
 )
 
-const insertCheckoutItem = `-- name: InsertCheckoutItem :one
+const countCheckoutItemsBySessionID = `-- name: CountCheckoutItemsBySessionID :one
+SELECT COUNT(*) FROM checkout_items WHERE checkout_session_id = $1
+`
+
+func (q *Queries) CountCheckoutItemsBySessionID(ctx context.Context, checkoutSessionID uuid.UUID) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countCheckoutItemsBySessionID, checkoutSessionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
+const getCheckoutItemsBySessionID = `-- name: GetCheckoutItemsBySessionID :many
+SELECT
+    id,
+    checkout_session_id,
+    user_id,
+    seller_id,
+    category_id,
+    category_name,
+    product_id,
+    product_title,
+    product_description,
+    product_primary_image_url,
+    variant_id,
+    color,
+    size,
+    buying_mode,
+    unit_price,
+    has_discount,
+    discount_type,
+    discount_value,
+    required_quantity,
+    weight_grams,
+    seller_store_name,
+    created_at
+FROM checkout_items
+WHERE checkout_session_id = $1
+`
+
+type GetCheckoutItemsBySessionIDRow struct {
+	ID                     uuid.UUID      `json:"id"`
+	CheckoutSessionID      uuid.UUID      `json:"checkout_session_id"`
+	UserID                 uuid.UUID      `json:"user_id"`
+	SellerID               uuid.UUID      `json:"seller_id"`
+	CategoryID             uuid.UUID      `json:"category_id"`
+	CategoryName           string         `json:"category_name"`
+	ProductID              uuid.UUID      `json:"product_id"`
+	ProductTitle           string         `json:"product_title"`
+	ProductDescription     string         `json:"product_description"`
+	ProductPrimaryImageUrl string         `json:"product_primary_image_url"`
+	VariantID              uuid.UUID      `json:"variant_id"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	BuyingMode             string         `json:"buying_mode"`
+	UnitPrice              string         `json:"unit_price"`
+	HasDiscount            bool           `json:"has_discount"`
+	DiscountType           sql.NullString `json:"discount_type"`
+	DiscountValue          sql.NullString `json:"discount_value"`
+	RequiredQuantity       int32          `json:"required_quantity"`
+	WeightGrams            int32          `json:"weight_grams"`
+	SellerStoreName        string         `json:"seller_store_name"`
+	CreatedAt              time.Time      `json:"created_at"`
+}
+
+func (q *Queries) GetCheckoutItemsBySessionID(ctx context.Context, checkoutSessionID uuid.UUID) ([]GetCheckoutItemsBySessionIDRow, error) {
+	rows, err := q.db.QueryContext(ctx, getCheckoutItemsBySessionID, checkoutSessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCheckoutItemsBySessionIDRow
+	for rows.Next() {
+		var i GetCheckoutItemsBySessionIDRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CheckoutSessionID,
+			&i.UserID,
+			&i.SellerID,
+			&i.CategoryID,
+			&i.CategoryName,
+			&i.ProductID,
+			&i.ProductTitle,
+			&i.ProductDescription,
+			&i.ProductPrimaryImageUrl,
+			&i.VariantID,
+			&i.Color,
+			&i.Size,
+			&i.BuyingMode,
+			&i.UnitPrice,
+			&i.HasDiscount,
+			&i.DiscountType,
+			&i.DiscountValue,
+			&i.RequiredQuantity,
+			&i.WeightGrams,
+			&i.SellerStoreName,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const insertCheckoutItem = `-- name: InsertCheckoutItem :exec
+
+
 INSERT INTO checkout_items (
     id,
     checkout_session_id,
     user_id,
     seller_id,
-    seller_store_name,  -- ✅ New field
     category_id,
     category_name,
     product_id,
@@ -35,114 +147,125 @@ INSERT INTO checkout_items (
     discount_value,
     required_quantity,
     weight_grams,
+    seller_store_name,
     created_at
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13, $14, $15,
+    $16, $17, $18, $19, $20,
+    $21, $22
 )
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5, -- ✅ New arg
-    $6,
-    $7,
-    $8,
-    $9,
-    $10,
-    $11,
-    $12,
-    $13,
-    $14,
-    $15,
-    $16,
-    $17,
-    $18,
-    $19,
-    $20,
-    $21,
-    $22
-)
-RETURNING
-    id,
-    checkout_session_id,
-    user_id,
-    seller_id,
-    seller_store_name,  -- ✅ New return field
-    category_id,
-    category_name,
-    product_id,
-    product_title,
-    product_description,
-    product_primary_image_url,
-    variant_id,
-    color,
-    size,
-    buying_mode,
-    unit_price,
-    has_discount,
-    discount_type,
-    discount_value,
-    required_quantity,
-    weight_grams,
-    created_at
 `
 
 type InsertCheckoutItemParams struct {
-	ID                     uuid.UUID `json:"id"`
-	CheckoutSessionID      uuid.UUID `json:"checkout_session_id"`
-	UserID                 uuid.UUID `json:"user_id"`
-	SellerID               uuid.UUID `json:"seller_id"`
-	SellerStoreName        string    `json:"seller_store_name"`
-	CategoryID             uuid.UUID `json:"category_id"`
-	CategoryName           string    `json:"category_name"`
-	ProductID              uuid.UUID `json:"product_id"`
-	ProductTitle           string    `json:"product_title"`
-	ProductDescription     string    `json:"product_description"`
-	ProductPrimaryImageUrl string    `json:"product_primary_image_url"`
-	VariantID              uuid.UUID `json:"variant_id"`
-	Color                  string    `json:"color"`
-	Size                   string    `json:"size"`
-	BuyingMode             string    `json:"buying_mode"`
-	UnitPrice              string    `json:"unit_price"`
-	HasDiscount            bool      `json:"has_discount"`
-	DiscountType           string    `json:"discount_type"`
-	DiscountValue          string    `json:"discount_value"`
-	RequiredQuantity       int32     `json:"required_quantity"`
-	WeightGrams            int32     `json:"weight_grams"`
-	CreatedAt              time.Time `json:"created_at"`
+	ID                     uuid.UUID      `json:"id"`
+	CheckoutSessionID      uuid.UUID      `json:"checkout_session_id"`
+	UserID                 uuid.UUID      `json:"user_id"`
+	SellerID               uuid.UUID      `json:"seller_id"`
+	CategoryID             uuid.UUID      `json:"category_id"`
+	CategoryName           string         `json:"category_name"`
+	ProductID              uuid.UUID      `json:"product_id"`
+	ProductTitle           string         `json:"product_title"`
+	ProductDescription     string         `json:"product_description"`
+	ProductPrimaryImageUrl string         `json:"product_primary_image_url"`
+	VariantID              uuid.UUID      `json:"variant_id"`
+	Color                  string         `json:"color"`
+	Size                   string         `json:"size"`
+	BuyingMode             string         `json:"buying_mode"`
+	UnitPrice              string         `json:"unit_price"`
+	HasDiscount            bool           `json:"has_discount"`
+	DiscountType           sql.NullString `json:"discount_type"`
+	DiscountValue          sql.NullString `json:"discount_value"`
+	RequiredQuantity       int32          `json:"required_quantity"`
+	WeightGrams            int32          `json:"weight_grams"`
+	SellerStoreName        string         `json:"seller_store_name"`
+	CreatedAt              time.Time      `json:"created_at"`
 }
 
-type InsertCheckoutItemRow struct {
-	ID                     uuid.UUID `json:"id"`
-	CheckoutSessionID      uuid.UUID `json:"checkout_session_id"`
-	UserID                 uuid.UUID `json:"user_id"`
-	SellerID               uuid.UUID `json:"seller_id"`
-	SellerStoreName        string    `json:"seller_store_name"`
-	CategoryID             uuid.UUID `json:"category_id"`
-	CategoryName           string    `json:"category_name"`
-	ProductID              uuid.UUID `json:"product_id"`
-	ProductTitle           string    `json:"product_title"`
-	ProductDescription     string    `json:"product_description"`
-	ProductPrimaryImageUrl string    `json:"product_primary_image_url"`
-	VariantID              uuid.UUID `json:"variant_id"`
-	Color                  string    `json:"color"`
-	Size                   string    `json:"size"`
-	BuyingMode             string    `json:"buying_mode"`
-	UnitPrice              string    `json:"unit_price"`
-	HasDiscount            bool      `json:"has_discount"`
-	DiscountType           string    `json:"discount_type"`
-	DiscountValue          string    `json:"discount_value"`
-	RequiredQuantity       int32     `json:"required_quantity"`
-	WeightGrams            int32     `json:"weight_grams"`
-	CreatedAt              time.Time `json:"created_at"`
-}
-
-func (q *Queries) InsertCheckoutItem(ctx context.Context, arg InsertCheckoutItemParams) (InsertCheckoutItemRow, error) {
-	row := q.db.QueryRowContext(ctx, insertCheckoutItem,
+// -- name: InsertCheckoutItem :one
+// INSERT INTO checkout_items (
+//
+//	id,
+//	checkout_session_id,
+//	user_id,
+//	seller_id,
+//	seller_store_name,  -- ✅ New field
+//	category_id,
+//	category_name,
+//	product_id,
+//	product_title,
+//	product_description,
+//	product_primary_image_url,
+//	variant_id,
+//	color,
+//	size,
+//	buying_mode,
+//	unit_price,
+//	has_discount,
+//	discount_type,
+//	discount_value,
+//	required_quantity,
+//	weight_grams,
+//	created_at
+//
+// )
+// VALUES (
+//
+//	sqlc.arg(id),
+//	sqlc.arg(checkout_session_id),
+//	sqlc.arg(user_id),
+//	sqlc.arg(seller_id),
+//	sqlc.arg(seller_store_name), -- ✅ New arg
+//	sqlc.arg(category_id),
+//	sqlc.arg(category_name),
+//	sqlc.arg(product_id),
+//	sqlc.arg(product_title),
+//	sqlc.arg(product_description),
+//	sqlc.arg(product_primary_image_url),
+//	sqlc.arg(variant_id),
+//	sqlc.arg(color),
+//	sqlc.arg(size),
+//	sqlc.arg(buying_mode),
+//	sqlc.arg(unit_price),
+//	sqlc.arg(has_discount),
+//	sqlc.arg(discount_type),
+//	sqlc.arg(discount_value),
+//	sqlc.arg(required_quantity),
+//	sqlc.arg(weight_grams),
+//	sqlc.arg(created_at)
+//
+// )
+// RETURNING
+//
+//	id,
+//	checkout_session_id,
+//	user_id,
+//	seller_id,
+//	seller_store_name,  -- ✅ New return field
+//	category_id,
+//	category_name,
+//	product_id,
+//	product_title,
+//	product_description,
+//	product_primary_image_url,
+//	variant_id,
+//	color,
+//	size,
+//	buying_mode,
+//	unit_price,
+//	has_discount,
+//	discount_type,
+//	discount_value,
+//	required_quantity,
+//	weight_grams,
+//	created_at;
+func (q *Queries) InsertCheckoutItem(ctx context.Context, arg InsertCheckoutItemParams) error {
+	_, err := q.db.ExecContext(ctx, insertCheckoutItem,
 		arg.ID,
 		arg.CheckoutSessionID,
 		arg.UserID,
 		arg.SellerID,
-		arg.SellerStoreName,
 		arg.CategoryID,
 		arg.CategoryName,
 		arg.ProductID,
@@ -159,32 +282,8 @@ func (q *Queries) InsertCheckoutItem(ctx context.Context, arg InsertCheckoutItem
 		arg.DiscountValue,
 		arg.RequiredQuantity,
 		arg.WeightGrams,
+		arg.SellerStoreName,
 		arg.CreatedAt,
 	)
-	var i InsertCheckoutItemRow
-	err := row.Scan(
-		&i.ID,
-		&i.CheckoutSessionID,
-		&i.UserID,
-		&i.SellerID,
-		&i.SellerStoreName,
-		&i.CategoryID,
-		&i.CategoryName,
-		&i.ProductID,
-		&i.ProductTitle,
-		&i.ProductDescription,
-		&i.ProductPrimaryImageUrl,
-		&i.VariantID,
-		&i.Color,
-		&i.Size,
-		&i.BuyingMode,
-		&i.UnitPrice,
-		&i.HasDiscount,
-		&i.DiscountType,
-		&i.DiscountValue,
-		&i.RequiredQuantity,
-		&i.WeightGrams,
-		&i.CreatedAt,
-	)
-	return i, err
+	return err
 }

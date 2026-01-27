@@ -38,3 +38,10 @@ func NewServerError(context string) error {
 func NewTableError(table string, reason string) error {
 	return fmt.Errorf("table '%s' error: %s", table, reason)
 }
+
+// import "errors"
+
+// IsCustomCode checks for a specific message used as a stand-in error code.
+func IsCustomCode(err error, code string) bool {
+	return err != nil && err.Error() == code
+}

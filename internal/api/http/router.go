@@ -198,6 +198,40 @@ import (
 	repo_update_category "tanmore_backend/internal/repository/product/product_update_category"
 	update_category_services "tanmore_backend/internal/services/product"
 
+	// 🌐 Public Product Detail Endpoint
+	public_detail_handlers "tanmore_backend/internal/api/http/handlers/product"
+	public_detail_repo "tanmore_backend/internal/repository/product/product_get_public_detail"
+	public_detail_service "tanmore_backend/internal/services/product"
+
+	// 🧾 Checkout session detail
+	// checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	repo_checkout_session "tanmore_backend/internal/repository/checkout/session_details"
+	// checkout_services "tanmore_backend/internal/services/checkout"
+
+	// 🆕 Merge Guest Cart
+	merge_cart_handlers "tanmore_backend/internal/api/http/handlers/cart"
+	merge_cart_repo "tanmore_backend/internal/repository/cart/merge_guest_cart"
+	merge_cart_services "tanmore_backend/internal/services/cart"
+
+	// 🆕 Add Shipping Address to Checkout Session
+	// checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	checkout_shipping_address_add_repo "tanmore_backend/internal/repository/checkout/add_shipping_address"
+	checkout_service "tanmore_backend/internal/services/checkout"
+
+	// 🧾 Checkout – Shipping Address
+	// checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	checkout_edit_repo "tanmore_backend/internal/repository/checkout/edit_shipping_address"
+	// checkout_service "tanmore_backend/internal/services/checkout"
+
+	// checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	checkout_review_repo "tanmore_backend/internal/repository/checkout/review"
+	// checkout_services "tanmore_backend/internal/services/checkout"
+
+	// Checkout Confirm Order
+	confirm_order_handlers "tanmore_backend/internal/api/http/handlers/checkout"
+	confirm_order_repo "tanmore_backend/internal/repository/checkout/confirm_order"
+	confirm_order_services "tanmore_backend/internal/services/checkout"
+
 	"tanmore_backend/pkg/token"
 )
 
@@ -571,6 +605,79 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	})
 	updateProductCategoryHandler := update_category_handlers.NewUpdateProductCategoryHandler(updateProductCategoryService)
 
+	// ------------------------------------------------------------
+	// 🌐 Public Product Detail Setup
+
+	publicDetailRepo := public_detail_repo.NewProductGetPublicDetailRepository(db)
+	publicDetailService := public_detail_service.NewGetProductPublicDetailService(public_detail_service.GetProductPublicDetailServiceDeps{
+		Repo: publicDetailRepo,
+	})
+	publicDetailHandler := public_detail_handlers.NewGetProductPublicDetailHandler(publicDetailService)
+
+	// ------------------------------------------------------------
+	// 🧾 Checkout Session Details Endpoint Wiring
+	checkoutSessionRepo := repo_checkout_session.NewCheckoutSessionDetailsRepository(db)
+	checkoutSessionService := checkout_services.NewGetCheckoutSessionDetailsService(checkout_services.GetCheckoutSessionDetailsServiceDeps{
+		Repo: checkoutSessionRepo,
+	})
+	checkoutSessionHandler := checkout_handlers.NewGetCheckoutSessionDetailsHandler(checkoutSessionService)
+
+	// ------------------------------------------------------------
+	// 🛒 Merge Guest Cart Endpoint Wiring
+
+	mergeGuestCartRepo := merge_cart_repo.NewMergeGuestCartRepository(db)
+	mergeGuestCartService := merge_cart_services.NewMergeGuestCartService(
+		merge_cart_services.MergeGuestCartServiceDeps{
+			Repo: mergeGuestCartRepo,
+		},
+	)
+	mergeGuestCartHandler := merge_cart_handlers.NewMergeGuestCartHandler(mergeGuestCartService)
+
+	// ------------------------------------------------------------
+	// 🚚 Add Shipping Address to Checkout Setup
+	addShippingRepo := checkout_shipping_address_add_repo.NewAddShippingAddressRepository(db)
+	addShippingService := checkout_service.NewAddShippingAddressService(addShippingRepo, "YOUR_PATHAO_TOKEN", 123456) // replace with actual token + store ID
+	addShippingHandler := checkout_handlers.NewAddShippingAddressHandler(addShippingService)
+
+	// ------------------------------------------------------------
+	// 🧾 Edit Shipping Address Setup
+
+	editShippingAddressRepo := checkout_edit_repo.NewEditShippingAddressRepository(db)
+
+	// editShippingAddressService := checkout_service.NewEditShippingAddressService(
+	// 	checkout_service.NewEditShippingAddressServiceDeps{
+	// 		Repo: editShippingAddressRepo,
+	// 	},
+	// )
+
+	editShippingAddressService := checkout_services.NewEditShippingAddressService(
+		editShippingAddressRepo,
+		"your-pathao-token-here",
+		123456,
+	)
+
+	editShippingAddressHandler :=
+		checkout_handlers.NewEditShippingAddressHandler(editShippingAddressService)
+
+		// ------------------------------------------------------------
+	// 🧾 Review Checkout Summary Endpoint Wiring
+
+	reviewCheckoutRepo := checkout_review_repo.NewReviewCheckoutRepository(db)
+
+	reviewCheckoutService := checkout_service.NewReviewCheckoutService(
+		reviewCheckoutRepo,
+	)
+
+	reviewCheckoutHandler :=
+		checkout_handlers.NewReviewCheckoutHandler(reviewCheckoutService)
+
+		// 🧾 Confirm COD Order Setup
+	confirmOrderRepo := confirm_order_repo.NewConfirmOrderRepository(db)
+	confirmOrderService := confirm_order_services.NewConfirmOrderService(confirm_order_services.ConfirmOrderServiceDeps{
+		Repo: confirmOrderRepo,
+	})
+	confirmOrderHandler := confirm_order_handlers.NewConfirmOrderHandler(confirmOrderService)
+
 	r.Route("/api/media", func(r chi.Router) {
 		r.Use(token.AttachAccessToken) // ✅ Require valid access token
 
@@ -602,8 +709,13 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	r.Get("/api/feed", feedSearchHandler.HandleFeed)
 	r.Get("/api/search", feedSearchHandler.HandleSearch)
 
+	// r.Route("/api/products", func(r chi.Router) {
+	// 	r.Get("/{product_id}", publicDetailHandler.Handle)
+	// })
+
 	// 🆕 Public Product Reviews Endpoint
 	r.Get("/api/products/{product_id}/reviews", getReviewsHandler.Handle)
+	r.Get("/api/products/{product_id}", publicDetailHandler.Handle)
 
 	// 🌲 Public category tree route
 	r.Get("/api/categories/tree", categoryTreeHandler.Handle)
@@ -700,20 +812,76 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 	})
 
+	// r.Route("/api/cart", func(r chi.Router) {
+	// 	r.Use(token.AttachAccessToken)
+
+	// 	r.Post("/add", addToCartHandler.Handle)
+	// 	r.Put("/update", updateCartQuantityHandler.Handle) // ⬅️ Add here
+
+	// 	r.Delete("/remove/{variant_id}", removeCartHandler.Handle) // ⬅️ Remove specific item
+	// 	r.Delete("/clear", clearCartHandler.Handle)                // ⬅️ Clear entire cart
+
+	// 	r.Get("/items", getAllCartItemsHandler.Handle) // 🆕 Get All Cart Items
+	// 	r.Post("/summary", cartSummaryHandler.Handle)  // 🆕 Cart Summary
+
+	// 	r.Post("/checkout/initiate", checkoutHandler.Handle) // 🧾 Add this line
+
+	// 	// 🆕 Merge guest cart into authenticated cart
+	// 	r.Post("/merge-guest", mergeGuestCartHandler.Handle)
+
+	// })
+
+	// r.Route("/api/cart", func(r chi.Router) {
+	// 	// ❌ Public endpoints (guests + logged in users)
+	// 	r.Post("/add", addToCartHandler.Handle)
+	// 	r.Put("/update", updateCartQuantityHandler.Handle)
+	// 	r.Delete("/remove/{variant_id}", removeCartHandler.Handle)
+	// 	r.Delete("/clear", clearCartHandler.Handle)
+	// 	r.Get("/items", getAllCartItemsHandler.Handle)
+	// 	r.Post("/summary", cartSummaryHandler.Handle)
+	// })
+
+	// // ✅ Auth-only endpoints (requires access token)
+	// r.Route("/api/cart", func(r chi.Router) {
+	// 	r.Use(token.AttachAccessToken) // ⬅️ only for the ones below
+
+	// 	r.Post("/checkout/initiate", checkoutHandler.Handle)
+	// 	r.Post("/merge-guest", mergeGuestCartHandler.Handle)
+	// })
+
 	r.Route("/api/cart", func(r chi.Router) {
-		r.Use(token.AttachAccessToken)
-
+		// ❌ Public endpoints
 		r.Post("/add", addToCartHandler.Handle)
-		r.Put("/update", updateCartQuantityHandler.Handle) // ⬅️ Add here
+		r.Put("/update", updateCartQuantityHandler.Handle)
+		r.Delete("/remove/{variant_id}", removeCartHandler.Handle)
+		r.Delete("/clear", clearCartHandler.Handle)
+		r.Get("/items", getAllCartItemsHandler.Handle)
+		r.Post("/summary", cartSummaryHandler.Handle)
 
-		r.Delete("/remove/{variant_id}", removeCartHandler.Handle) // ⬅️ Remove specific item
-		r.Delete("/clear", clearCartHandler.Handle)                // ⬅️ Clear entire cart
+		// ✅ Auth-only endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(token.AttachAccessToken)
+			r.Post("/checkout/initiate", checkoutHandler.Handle)
+			r.Post("/merge-guest", mergeGuestCartHandler.Handle)
+		})
+	})
 
-		r.Get("/items", getAllCartItemsHandler.Handle) // 🆕 Get All Cart Items
-		r.Post("/summary", cartSummaryHandler.Handle)  // 🆕 Cart Summary
+	r.Route("/api/checkout", func(r chi.Router) {
+		r.Use(token.AttachAccessToken) // Requires access token
 
-		r.Post("/checkout/initiate", checkoutHandler.Handle) // 🧾 Add this line
+		// 🧾 Get Checkout Session Details
+		r.Get("/{checkout_session_id}", checkoutSessionHandler.Handle)
 
+		r.Post("/{checkout_session_id}/add-shipping-address", addShippingHandler.Handle)
+
+		// ✏️ Edit Shipping Address
+		r.Put("/{checkout_session_id}/shipping-address/{shipping_address_id}/edit", editShippingAddressHandler.Handle)
+
+		// 🧾 Review checkout summary
+		r.Get("/{checkout_session_id}/review", reviewCheckoutHandler.Handle)
+
+		// confirm order
+		r.Post("/{checkout_session_id}/confirm", confirmOrderHandler.Handle)
 	})
 
 	r.Route("/api/products", func(r chi.Router) {

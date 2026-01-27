@@ -68,8 +68,8 @@ func (h *AddProductMediaHandler) Handle(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if req.MediaType != "image" && req.MediaType != "promo_video" {
-		response.BadRequest(w, errors.NewValidationError("media_type", "must be 'image' or 'promo_video'"))
+	if req.MediaType != "image" && req.MediaType != "video" {
+		response.BadRequest(w, errors.NewValidationError("media_type", "must be 'image' or 'video'"))
 		return
 	}
 

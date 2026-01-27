@@ -1,8 +1,3 @@
-// ------------------------------------------------------------
-// 📁 File: internal/repository/cart/get_all_cart_items/get_all_cart_items_repository.go
-// 🧠 Concrete implementation of GetAllCartItemsRepoInterface.
-//     Handles customer moderation, variant ID lookup, and snapshot-enriched cart data.
-
 package get_all_cart_items
 
 import (
@@ -10,11 +5,11 @@ import (
 	"database/sql"
 
 	"tanmore_backend/internal/db/sqlc"
+	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
 
-// 📦 GetAllCartItemsRepository implements GetAllCartItemsRepoInterface
 type GetAllCartItemsRepository struct {
 	db *sql.DB
 	q  *sqlc.Queries
@@ -56,18 +51,46 @@ func (r *GetAllCartItemsRepository) GetUserByID(
 	return r.q.GetUserByID(ctx, id)
 }
 
-// 🧾 Get all active variant IDs in user's cart
+// // 🧾 Get all active variant IDs (supports user or guest)
+// func (r *GetAllCartItemsRepository) ListActiveVariantIDsByOwner(
+// 	ctx context.Context,
+// 	arg sqlc.ListActiveVariantIDsByOwnerParams,
+// ) ([]uuid.UUID, error) {
+// 	return r.q.ListActiveVariantIDsByOwner(ctx, arg)
+// }
+
+// // 🔍 Fetch full cart + snapshot joined rows (supports user or guest)
+// func (r *GetAllCartItemsRepository) GetActiveCartVariantSnapshotsByOwnerAndVariantIDs(
+// 	ctx context.Context,
+// 	arg sqlc.GetActiveCartVariantSnapshotsByOwnerAndVariantIDsParams,
+// ) ([]sqlc.GetActiveCartVariantSnapshotsByOwnerAndVariantIDsRow, error) {
+// 	return r.q.GetActiveCartVariantSnapshotsByOwnerAndVariantIDs(ctx, arg)
+// }
+
 func (r *GetAllCartItemsRepository) ListActiveVariantIDsByUser(
 	ctx context.Context,
 	userID uuid.UUID,
 ) ([]uuid.UUID, error) {
-	return r.q.ListActiveVariantIDsByUser(ctx, userID)
+	return r.q.ListActiveVariantIDsByUser(ctx, sqlnull.UUID(userID))
 }
 
-// 🔍 Fetch full cart + snapshot joined rows
+func (r *GetAllCartItemsRepository) ListActiveVariantIDsByGuest(
+	ctx context.Context,
+	guestUserID uuid.UUID,
+) ([]uuid.UUID, error) {
+	return r.q.ListActiveVariantIDsByGuest(ctx, sqlnull.UUID(guestUserID))
+}
+
 func (r *GetAllCartItemsRepository) GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 	ctx context.Context,
 	arg sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams,
 ) ([]sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow, error) {
 	return r.q.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, arg)
+}
+
+func (r *GetAllCartItemsRepository) GetActiveCartVariantSnapshotsByGuestAndVariantIDs(
+	ctx context.Context,
+	arg sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams,
+) ([]sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow, error) {
+	return r.q.GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx, arg)
 }

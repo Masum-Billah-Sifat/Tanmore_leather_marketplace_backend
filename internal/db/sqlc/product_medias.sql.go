@@ -108,6 +108,57 @@ func (q *Queries) GetActiveMediasByProductID(ctx context.Context, arg GetActiveM
 	return items, nil
 }
 
+const getAllMediaForProduct = `-- name: GetAllMediaForProduct :many
+SELECT
+    id,
+    product_id,
+    media_type,
+    media_url,
+    is_primary,
+    is_archived
+FROM product_medias
+WHERE product_id = $1
+`
+
+type GetAllMediaForProductRow struct {
+	ID         uuid.UUID `json:"id"`
+	ProductID  uuid.UUID `json:"product_id"`
+	MediaType  string    `json:"media_type"`
+	MediaUrl   string    `json:"media_url"`
+	IsPrimary  bool      `json:"is_primary"`
+	IsArchived bool      `json:"is_archived"`
+}
+
+func (q *Queries) GetAllMediaForProduct(ctx context.Context, productID uuid.UUID) ([]GetAllMediaForProductRow, error) {
+	rows, err := q.db.QueryContext(ctx, getAllMediaForProduct, productID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetAllMediaForProductRow
+	for rows.Next() {
+		var i GetAllMediaForProductRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProductID,
+			&i.MediaType,
+			&i.MediaUrl,
+			&i.IsPrimary,
+			&i.IsArchived,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPrimaryProductImageByProductID = `-- name: GetPrimaryProductImageByProductID :one
 SELECT
     id,

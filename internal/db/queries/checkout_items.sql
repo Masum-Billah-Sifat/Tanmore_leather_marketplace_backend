@@ -1,10 +1,83 @@
--- name: InsertCheckoutItem :one
+-- -- name: InsertCheckoutItem :one
+-- INSERT INTO checkout_items (
+--     id,
+--     checkout_session_id,
+--     user_id,
+--     seller_id,
+--     seller_store_name,  -- ✅ New field
+--     category_id,
+--     category_name,
+--     product_id,
+--     product_title,
+--     product_description,
+--     product_primary_image_url,
+--     variant_id,
+--     color,
+--     size,
+--     buying_mode,
+--     unit_price,
+--     has_discount,
+--     discount_type,
+--     discount_value,
+--     required_quantity,
+--     weight_grams,
+--     created_at
+-- )
+-- VALUES (
+--     sqlc.arg(id),
+--     sqlc.arg(checkout_session_id),
+--     sqlc.arg(user_id),
+--     sqlc.arg(seller_id),
+--     sqlc.arg(seller_store_name), -- ✅ New arg
+--     sqlc.arg(category_id),
+--     sqlc.arg(category_name),
+--     sqlc.arg(product_id),
+--     sqlc.arg(product_title),
+--     sqlc.arg(product_description),
+--     sqlc.arg(product_primary_image_url),
+--     sqlc.arg(variant_id),
+--     sqlc.arg(color),
+--     sqlc.arg(size),
+--     sqlc.arg(buying_mode),
+--     sqlc.arg(unit_price),
+--     sqlc.arg(has_discount),
+--     sqlc.arg(discount_type),
+--     sqlc.arg(discount_value),
+--     sqlc.arg(required_quantity),
+--     sqlc.arg(weight_grams),
+--     sqlc.arg(created_at)
+-- )
+-- RETURNING
+--     id,
+--     checkout_session_id,
+--     user_id,
+--     seller_id,
+--     seller_store_name,  -- ✅ New return field
+--     category_id,
+--     category_name,
+--     product_id,
+--     product_title,
+--     product_description,
+--     product_primary_image_url,
+--     variant_id,
+--     color,
+--     size,
+--     buying_mode,
+--     unit_price,
+--     has_discount,
+--     discount_type,
+--     discount_value,
+--     required_quantity,
+--     weight_grams,
+--     created_at;
+
+
+-- name: InsertCheckoutItem :exec
 INSERT INTO checkout_items (
     id,
     checkout_session_id,
     user_id,
     seller_id,
-    seller_store_name,  -- ✅ New field
     category_id,
     category_name,
     product_id,
@@ -21,38 +94,24 @@ INSERT INTO checkout_items (
     discount_value,
     required_quantity,
     weight_grams,
+    seller_store_name,
     created_at
-)
-VALUES (
-    sqlc.arg(id),
-    sqlc.arg(checkout_session_id),
-    sqlc.arg(user_id),
-    sqlc.arg(seller_id),
-    sqlc.arg(seller_store_name), -- ✅ New arg
-    sqlc.arg(category_id),
-    sqlc.arg(category_name),
-    sqlc.arg(product_id),
-    sqlc.arg(product_title),
-    sqlc.arg(product_description),
-    sqlc.arg(product_primary_image_url),
-    sqlc.arg(variant_id),
-    sqlc.arg(color),
-    sqlc.arg(size),
-    sqlc.arg(buying_mode),
-    sqlc.arg(unit_price),
-    sqlc.arg(has_discount),
-    sqlc.arg(discount_type),
-    sqlc.arg(discount_value),
-    sqlc.arg(required_quantity),
-    sqlc.arg(weight_grams),
-    sqlc.arg(created_at)
-)
-RETURNING
+) VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10,
+    $11, $12, $13, $14, $15,
+    $16, $17, $18, $19, $20,
+    $21, $22
+);
+
+
+
+-- name: GetCheckoutItemsBySessionID :many
+SELECT
     id,
     checkout_session_id,
     user_id,
     seller_id,
-    seller_store_name,  -- ✅ New return field
     category_id,
     category_name,
     product_id,
@@ -69,4 +128,11 @@ RETURNING
     discount_value,
     required_quantity,
     weight_grams,
-    created_at;
+    seller_store_name,
+    created_at
+FROM checkout_items
+WHERE checkout_session_id = $1;
+
+
+-- name: CountCheckoutItemsBySessionID :one
+SELECT COUNT(*) FROM checkout_items WHERE checkout_session_id = $1;

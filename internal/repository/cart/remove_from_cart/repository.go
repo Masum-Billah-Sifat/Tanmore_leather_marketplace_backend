@@ -1,8 +1,3 @@
-// ------------------------------------------------------------
-// 📁 File: internal/repository/cart/remove_from_cart/remove_from_cart_repository.go
-// 🧠 Concrete implementation of RemoveFromCartRepoInterface.
-//     Performs customer validation, cart item fetch, and deactivation.
-
 package remove_from_cart
 
 import (
@@ -10,11 +5,11 @@ import (
 	"database/sql"
 
 	"tanmore_backend/internal/db/sqlc"
+	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
 
-// 📦 RemoveFromCartRepository implements RemoveFromCartRepoInterface
 type RemoveFromCartRepository struct {
 	db *sql.DB
 	q  *sqlc.Queries
@@ -38,16 +33,14 @@ func (r *RemoveFromCartRepository) WithTx(
 		return err
 	}
 	qtx := sqlc.New(tx)
-
 	if err := fn(qtx); err != nil {
 		_ = tx.Rollback()
 		return err
 	}
-
 	return tx.Commit()
 }
 
-// 🧑 Get customer user by ID
+// 🧑 Get authenticated user by ID
 func (r *RemoveFromCartRepository) GetUserByID(
 	ctx context.Context,
 	id uuid.UUID,
@@ -55,18 +48,52 @@ func (r *RemoveFromCartRepository) GetUserByID(
 	return r.q.GetUserByID(ctx, id)
 }
 
-// 🛒 Get cart item by user and variant
+// // 🛒 Get cart item by user or guest owner
+// func (r *RemoveFromCartRepository) GetCartItemByOwnerAndVariant(
+// 	ctx context.Context,
+// 	arg sqlc.GetCartItemByOwnerAndVariantParams,
+// ) (sqlc.GetCartItemByOwnerAndVariantRow, error) {
+// 	return r.q.GetCartItemByOwnerAndVariant(ctx, arg)
+// }
+
 func (r *RemoveFromCartRepository) GetCartItemByUserAndVariant(
 	ctx context.Context,
-	arg sqlc.GetCartItemByUserAndVariantParams,
-) (sqlc.CartItem, error) {
-	return r.q.GetCartItemByUserAndVariant(ctx, arg)
+	userID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByUserAndVariantRow, error) {
+	return r.q.GetCartItemByUserAndVariant(ctx, sqlc.GetCartItemByUserAndVariantParams{
+		UserID: sqlnull.UUID(userID), VariantID: variantID,
+	})
 }
 
-// ❌ Deactivate cart item
-func (r *RemoveFromCartRepository) DeactivateCartItem(
+func (r *RemoveFromCartRepository) GetCartItemByGuestAndVariant(
 	ctx context.Context,
-	arg sqlc.DeactivateCartItemParams,
+	guestUserID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByGuestAndVariantRow, error) {
+	return r.q.GetCartItemByGuestAndVariant(ctx, sqlc.GetCartItemByGuestAndVariantParams{
+		GuestUserID: sqlnull.UUID(guestUserID), VariantID: variantID,
+	})
+}
+
+// // ❌ Deactivate cart item by user or guest owner
+// func (r *RemoveFromCartRepository) DeactivateCartItemByOwnerAndVariant(
+// 	ctx context.Context,
+// 	arg sqlc.DeactivateCartItemByOwnerAndVariantParams,
+// ) error {
+// 	return r.q.DeactivateCartItemByOwnerAndVariant(ctx, arg)
+// }
+
+func (r *RemoveFromCartRepository) DeactivateCartItemByUserAndVariant(
+	ctx context.Context,
+	arg sqlc.DeactivateCartItemByUserAndVariantParams,
 ) error {
-	return r.q.DeactivateCartItem(ctx, arg)
+	return r.q.DeactivateCartItemByUserAndVariant(ctx, arg)
+}
+
+func (r *RemoveFromCartRepository) DeactivateCartItemByGuestAndVariant(
+	ctx context.Context,
+	arg sqlc.DeactivateCartItemByGuestAndVariantParams,
+) error {
+	return r.q.DeactivateCartItemByGuestAndVariant(ctx, arg)
 }

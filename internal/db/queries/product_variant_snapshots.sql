@@ -450,3 +450,49 @@ SET
     isproductarchived = true,
     updatedat = $1
 WHERE productid = $2;
+
+
+
+-- name: GetProductVariantSnapshotsByVariantIDs :many
+SELECT
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    weight_grams,
+
+    -- parent info
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl
+FROM product_variant_snapshots
+WHERE variantid = ANY($1::uuid[]);

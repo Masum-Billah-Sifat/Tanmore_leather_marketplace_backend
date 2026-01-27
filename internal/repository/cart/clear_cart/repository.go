@@ -56,17 +56,24 @@ func (r *ClearCartRepository) GetUserByID(
 	return r.q.GetUserByID(ctx, id)
 }
 
-// // 🧹 Clear all active cart items for user
-// func (r *ClearCartRepository) ClearCartItemsForUser(
+// // 🧹 Clear all cart items for either user or guest
+// func (r *ClearCartRepository) ClearCartItemsByOwner(
 // 	ctx context.Context,
-// 	arg sqlc.ClearCartItemsForUserParams,
-// ) (int64, error) {
-// 	return r.q.ClearCartItemsForUser(ctx, arg)
+// 	arg sqlc.ClearCartItemsByOwnerParams,
+// ) error {
+// 	return r.q.ClearCartItemsByOwner(ctx, arg)
 // }
 
-func (r *ClearCartRepository) ClearCartItemsForUser(
+func (r *ClearCartRepository) ClearCartItemsByUser(
 	ctx context.Context,
-	arg sqlc.ClearCartItemsForUserParams,
+	arg sqlc.ClearCartItemsByUserParams,
 ) error {
-	return r.q.ClearCartItemsForUser(ctx, arg)
+	return r.q.ClearCartItemsByUser(ctx, arg)
+}
+
+func (r *ClearCartRepository) ClearCartItemsByGuest(
+	ctx context.Context,
+	arg sqlc.ClearCartItemsByGuestParams,
+) error {
+	return r.q.ClearCartItemsByGuest(ctx, arg)
 }

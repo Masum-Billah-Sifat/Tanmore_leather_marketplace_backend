@@ -31,4 +31,6 @@ type ProductGetFullDetailRepoInterface interface {
 
 	// 🖼️ Get primary image from product_medias
 	GetPrimaryImageForProduct(ctx context.Context, arg sqlc.GetPrimaryProductImageByProductIDParams) (sqlc.ProductMedia, error)
+	// 🧾 Get all media (images/videos) for a product
+	GetAllMediaForProduct(ctx context.Context, productID uuid.UUID) ([]sqlc.GetAllMediaForProductRow, error)
 }

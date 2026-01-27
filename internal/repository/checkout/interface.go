@@ -3,8 +3,8 @@
 // 🧠 Repository interface for unified checkout flow (cart + product).
 //     - Validates user moderation
 //     - Fetches variant snapshot data
-//     - Fetches active cart variant snapshot joins
-//     - Inserts checkout session and item(s)
+//     - Inserts checkout session and items (exec-only)
+//     - Fetches platform promotions
 
 package checkout
 
@@ -23,23 +23,30 @@ type CheckoutRepoInterface interface {
 	// 🧑 Validate user moderation
 	GetUserByID(ctx context.Context, userID uuid.UUID) (sqlc.User, error)
 
-	// 📦 Fetch snapshot for single product variant
-	GetVariantSnapshotByVariantID(ctx context.Context, variantID uuid.UUID) (sqlc.ProductVariantSnapshot, error)
-
-	// 🛒 Fetch enriched cart + snapshot for multiple variants
+	// 🛒 Fetch enriched cart + snapshot join
 	GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 		ctx context.Context,
 		arg sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams,
 	) ([]sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow, error)
 
-	// 🧾 Insert new checkout session row
+	// 🧾 Insert checkout session (exec-only)
 	InsertCheckoutSession(
 		ctx context.Context,
 		arg sqlc.InsertCheckoutSessionParams,
-	) (sqlc.CheckoutSession, error)
+	) error
 
+	// 📄 Insert checkout item (exec-only)
 	InsertCheckoutItem(
 		ctx context.Context,
 		arg sqlc.InsertCheckoutItemParams,
-	) (sqlc.InsertCheckoutItemRow, error)
+	) error
+
+	// 🎁 Get active platform-level promotions
+	GetActivePlatformPromotions(
+		ctx context.Context,
+	) ([]sqlc.GetActivePlatformPromotionsRow, error)
+
+	// GetActivePlatformPromotions(
+	// 	ctx context.Context,
+	// ) ([]sqlc.PlatformPromotion, error)
 }

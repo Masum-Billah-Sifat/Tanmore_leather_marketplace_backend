@@ -62,8 +62,8 @@ func (h *ArchiveProductMediaHandler) Handle(w http.ResponseWriter, r *http.Reque
 
 	// 4️⃣ Get media_type from query param
 	mediaType := r.URL.Query().Get("media_type")
-	if mediaType != "image" && mediaType != "promo_video" {
-		response.BadRequest(w, errors.NewValidationError("media_type", "must be 'image' or 'promo_video'"))
+	if mediaType != "image" && mediaType != "video" {
+		response.BadRequest(w, errors.NewValidationError("media_type", "must be 'image' or 'video'"))
 		return
 	}
 

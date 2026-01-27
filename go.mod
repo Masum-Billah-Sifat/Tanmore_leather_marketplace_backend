@@ -26,6 +26,7 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/redis/go-redis/v9 v9.17.2 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/sqlc-dev/pqtype v0.3.0 // indirect
 	github.com/tinylib/msgp v1.3.0 // indirect
 	golang.org/x/net v0.38.0 // indirect
 	golang.org/x/sys v0.34.0 // indirect

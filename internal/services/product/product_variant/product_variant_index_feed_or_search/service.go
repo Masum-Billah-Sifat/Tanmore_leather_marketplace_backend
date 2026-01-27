@@ -16,8 +16,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// 80 84 100 120 149 in this lines errors show up
-
 // 📦 Input structure from handler
 type FeedQueryInput struct {
 	Page              int
@@ -35,13 +33,6 @@ type FeedQueryInput struct {
 	OnlyWholesale     *bool
 	Sort              *string
 }
-
-// type FeedQueryResult struct {
-// 	Page       int           `json:"page"`
-// 	PerPage    int           `json:"per_page"`
-// 	TotalItems int           `json:"total_items"`
-// 	Sellers    []SellerGroup `json:"sellers"`
-// }
 
 type FeedQueryResult struct {
 	Page       int            `json:"page"`
@@ -63,15 +54,6 @@ type CategoryGroup struct {
 	ProductsList []ProductGroup              `json:"products"`
 	Products     map[uuid.UUID]*ProductGroup `json:"-"` // internal only
 }
-
-// type ProductGroup struct {
-// 	ProductID     uuid.UUID      `json:"product_id"`
-// 	Title         string         `json:"product_title"`
-// 	Description   string         `json:"product_description"`
-// 	Images        []string       `json:"product_images"`
-// 	PromoVideoURL *string        `json:"product_promo_video_url,omitempty"`
-// 	Variants      []VariantGroup `json:"variants"`
-// }
 
 type ProductGroup struct {
 	ProductID     uuid.UUID `json:"product_id"`

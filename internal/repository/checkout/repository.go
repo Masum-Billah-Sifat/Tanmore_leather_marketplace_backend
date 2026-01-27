@@ -2,6 +2,7 @@
 // 📁 File: internal/repository/checkout/checkout_repository.go
 // 🧠 Concrete implementation of CheckoutRepoInterface.
 //     - Handles moderation, snapshot fetch, session + item inserts
+//     - Fetches active platform promotions
 
 package checkout
 
@@ -56,15 +57,7 @@ func (r *CheckoutRepository) GetUserByID(
 	return r.q.GetUserByID(ctx, userID)
 }
 
-// 📦 Fetch snapshot for single variant (Buy Now)
-func (r *CheckoutRepository) GetVariantSnapshotByVariantID(
-	ctx context.Context,
-	variantID uuid.UUID,
-) (sqlc.ProductVariantSnapshot, error) {
-	return r.q.GetVariantSnapshotByVariantID(ctx, variantID)
-}
-
-// 🛒 Fetch enriched cart + snapshot join (Bulk cart)
+// 🛒 Fetch enriched cart + snapshot join
 func (r *CheckoutRepository) GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 	ctx context.Context,
 	arg sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams,
@@ -72,25 +65,49 @@ func (r *CheckoutRepository) GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 	return r.q.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, arg)
 }
 
-// 🧾 Insert checkout session row
-func (r *CheckoutRepository) InsertCheckoutSession(
-	ctx context.Context,
-	arg sqlc.InsertCheckoutSessionParams,
-) (sqlc.CheckoutSession, error) {
-	return r.q.InsertCheckoutSession(ctx, arg)
-}
+// // 🧾 Insert checkout session (exec-only)
+// func (r *CheckoutRepository) InsertCheckoutSession(
+// 	ctx context.Context,
+// 	arg sqlc.InsertCheckoutSessionParams,
+// ) error {
+// 	return r.q.InsertCheckoutSession(ctx, arg)
+// }
 
-// // 📄 Insert one checkout item row
+// // 📄 Insert checkout item (exec-only)
 // func (r *CheckoutRepository) InsertCheckoutItem(
 // 	ctx context.Context,
 // 	arg sqlc.InsertCheckoutItemParams,
-// ) (sqlc.CheckoutItem, error) {
+// ) error {
 // 	return r.q.InsertCheckoutItem(ctx, arg)
 // }
 
+// 🧾 Insert checkout session (exec-only)
+func (r *CheckoutRepository) InsertCheckoutSession(
+	ctx context.Context,
+	arg sqlc.InsertCheckoutSessionParams,
+) error {
+	_, err := r.q.InsertCheckoutSession(ctx, arg)
+	return err
+}
+
+// 📄 Insert checkout item (exec-only)
 func (r *CheckoutRepository) InsertCheckoutItem(
 	ctx context.Context,
 	arg sqlc.InsertCheckoutItemParams,
-) (sqlc.InsertCheckoutItemRow, error) {
-	return r.q.InsertCheckoutItem(ctx, arg)
+) error {
+	err := r.q.InsertCheckoutItem(ctx, arg)
+	return err
+}
+
+// // 🎁 Fetch active platform-level promotions
+// func (r *CheckoutRepository) GetActivePlatformPromotions(
+// 	ctx context.Context,
+// ) ([]sqlc.PlatformPromotion, error) {
+// 	return r.q.GetActivePlatformPromotions(ctx)
+// }
+
+func (r *CheckoutRepository) GetActivePlatformPromotions(
+	ctx context.Context,
+) ([]sqlc.GetActivePlatformPromotionsRow, error) {
+	return r.q.GetActivePlatformPromotions(ctx)
 }

@@ -1,12 +1,6 @@
 // ------------------------------------------------------------
 // 📁 File: internal/services/cart/get_all_cart_items_service.go
 // 🧠 Handles retrieval of active cart items enriched with variant snapshot data.
-//     - Validates customer (not banned/archived)
-//     - Fetches all active variant IDs in user's cart
-//     - Runs enriched JOIN query against snapshot table
-//     - Filters into valid and invalid items
-//     - Groups valid items by seller → product → variants
-//     - Returns grouped valid_items and flat invalid_items array
 
 package cart
 
@@ -16,17 +10,17 @@ import (
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/cart/get_all_cart_items"
 	"tanmore_backend/pkg/errors"
+	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
 
-// ------------------------------------------------------------
 // 📥 Input from handler
 type GetAllCartItemsInput struct {
-	UserID uuid.UUID
+	UserID      *uuid.UUID
+	GuestUserID *uuid.UUID
 }
 
-// ------------------------------------------------------------
 // 🧤 Variant representation under a product
 type CartVariantItem struct {
 	VariantID             uuid.UUID `json:"variant_id"`
@@ -46,7 +40,6 @@ type CartVariantItem struct {
 	QuantityInCart        int32     `json:"quantity_in_cart"`
 }
 
-// ------------------------------------------------------------
 // 🛍 Product grouping per seller
 type CartProductItem struct {
 	ProductID           uuid.UUID         `json:"product_id"`
@@ -63,7 +56,6 @@ type CartGroupedBySeller struct {
 	Products  []*CartProductItem
 }
 
-// ------------------------------------------------------------
 // ❌ Invalid item representation
 type InvalidCartItem struct {
 	VariantID    uuid.UUID `json:"variant_id"`
@@ -74,14 +66,12 @@ type InvalidCartItem struct {
 	Size         string    `json:"size"`
 }
 
-// ------------------------------------------------------------
 // 📤 Final response
 type GetAllCartItemsResult struct {
 	ValidItems   []CartGroupedBySeller `json:"valid_items"`
 	InvalidItems []InvalidCartItem     `json:"invalid_items"`
 }
 
-// ------------------------------------------------------------
 // 🧱 Dependencies
 type GetAllCartItemsServiceDeps struct {
 	Repo repo.GetAllCartItemsRepoInterface
@@ -97,52 +87,81 @@ func NewGetAllCartItemsService(deps GetAllCartItemsServiceDeps) *GetAllCartItems
 	return &GetAllCartItemsService{Deps: deps}
 }
 
+// 🚀 Entrypoint
 func (s *GetAllCartItemsService) Start(
 	ctx context.Context,
 	input GetAllCartItemsInput,
 ) (*GetAllCartItemsResult, error) {
-	// Step 1: Validate user moderation
-	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-	if err != nil {
-		return nil, errors.NewNotFoundError("user")
-	}
-	if user.IsArchived {
-		return nil, errors.NewAuthError("user is archived")
-	}
-	if user.IsBanned {
-		return nil, errors.NewAuthError("user is banned")
+
+	// Step 1: Validate user moderation (ONLY if logged in)
+	if input.UserID != nil {
+		user, err := s.Deps.Repo.GetUserByID(ctx, *input.UserID)
+		if err != nil {
+			return nil, errors.NewNotFoundError("user")
+		}
+		if user.IsArchived {
+			return nil, errors.NewAuthError("user is archived")
+		}
+		if user.IsBanned {
+			return nil, errors.NewAuthError("user is banned")
+		}
 	}
 
-	// Step 2: Fetch active variant IDs in cart
-	activeVariantIDs, err := s.Deps.Repo.ListActiveVariantIDsByUser(ctx, input.UserID)
+	// Step 2: List all active variant IDs
+	var variantIDs []uuid.UUID
+	var err error
+
+	if input.UserID != nil {
+		variantIDs, err = s.Deps.Repo.ListActiveVariantIDsByUser(ctx, *input.UserID)
+	} else {
+		variantIDs, err = s.Deps.Repo.ListActiveVariantIDsByGuest(ctx, *input.GuestUserID)
+	}
+
 	if err != nil {
 		return nil, errors.NewTableError("cart_items", "cannot list variant IDs")
 	}
-	if len(activeVariantIDs) == 0 {
+
+	if len(variantIDs) == 0 {
 		return &GetAllCartItemsResult{
 			ValidItems:   []CartGroupedBySeller{},
 			InvalidItems: []InvalidCartItem{},
 		}, nil
 	}
 
-	// Step 3: Enriched join query
-	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-			UserID:     input.UserID,
-			VariantIds: activeVariantIDs,
-		},
-	)
+	// Step 3: Fetch enriched cart snapshot rows
+	// var rows []sqlc.GetActiveCartVariantSnapshotsByOwnerAndVariantIDsRow
+	var rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow
+
+	if input.UserID != nil {
+		rows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
+			UserID:     sqlnull.UUIDPtr(input.UserID),
+			VariantIds: variantIDs,
+		})
+	} else {
+		var guestRows []sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow
+
+		guestRows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams{
+			GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
+			VariantIds:  variantIDs,
+		})
+
+		// 🪄 Convert guestRows to unified []userRow type so rest of code works
+		for _, r := range guestRows {
+			rows = append(rows, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow(r))
+		}
+
+	}
+
 	if err != nil {
 		return nil, errors.NewServerError("cannot fetch snapshot enriched cart items")
 	}
 
-	// Step 4: Process rows
+	// Step 4: Group and filter rows
 	grouped := make(map[uuid.UUID]*CartGroupedBySeller)
 	productMap := make(map[uuid.UUID]map[uuid.UUID]*CartProductItem)
 	var invalidItems []InvalidCartItem
 
 	for _, row := range rows {
-		// Moderation filters
 		if !row.Issellerapproved || row.Issellerarchived || row.Issellerbanned ||
 			!row.Isproductapproved || row.Isproductarchived || row.Isproductbanned ||
 			row.Isvariantarchived || !row.Isvariantinstock {
@@ -157,7 +176,7 @@ func (s *GetAllCartItemsService) Start(
 			continue
 		}
 
-		// Create seller group if not exists
+		// Seller group
 		if _, ok := grouped[row.Sellerid]; !ok {
 			grouped[row.Sellerid] = &CartGroupedBySeller{
 				SellerID:  row.Sellerid,
@@ -167,7 +186,7 @@ func (s *GetAllCartItemsService) Start(
 			productMap[row.Sellerid] = make(map[uuid.UUID]*CartProductItem)
 		}
 
-		// Create product group if not exists
+		// Product group
 		if _, ok := productMap[row.Sellerid][row.Productid]; !ok {
 			product := &CartProductItem{
 				ProductID:           row.Productid,
@@ -178,68 +197,32 @@ func (s *GetAllCartItemsService) Start(
 				Variants:            []CartVariantItem{},
 			}
 			productMap[row.Sellerid][row.Productid] = product
-			// 🔁 FIXED: Append pointer instead of dereferenced copy
 			grouped[row.Sellerid].Products = append(grouped[row.Sellerid].Products, product)
 		}
 
-		// ---- Retail discount
-		var retailDiscount int64
-		var retailDiscountType string
-		if row.Retaildiscount.Valid {
-			retailDiscount = row.Retaildiscount.Int64
-		}
-		if row.Retaildiscounttype.Valid {
-			retailDiscountType = row.Retaildiscounttype.String
-		}
-
-		// ---- Wholesale fields
-		var wholesalePrice int64
-		var wholesaleMinQty int32
-		var wholesaleDiscount int64
-		var wholesaleDiscountType string
-		if row.Wholesaleprice.Valid {
-			wholesalePrice = row.Wholesaleprice.Int64
-		}
-		if row.Wholesaleminquantity.Valid {
-			wholesaleMinQty = row.Wholesaleminquantity.Int32
-		}
-		if row.Wholesalediscount.Valid {
-			wholesaleDiscount = row.Wholesalediscount.Int64
-		}
-		if row.Wholesalediscounttype.Valid {
-			wholesaleDiscountType = row.Wholesalediscounttype.String
-		}
-
-		// ---- Cart quantity
-		var quantityInCart int32
-		if row.CartRequiredQuantity.Valid {
-			quantityInCart = row.CartRequiredQuantity.Int32
-		}
-
+		// Optional fields
 		variant := CartVariantItem{
 			VariantID:             row.Variantid,
 			Color:                 row.Color,
 			Size:                  row.Size,
 			RetailPrice:           row.Retailprice,
 			HasRetailDiscount:     row.Hasretaildiscount,
-			RetailDiscount:        retailDiscount,
-			RetailDiscountType:    retailDiscountType,
+			RetailDiscount:        row.Retaildiscount.Int64,
+			RetailDiscountType:    row.Retaildiscounttype.String,
 			HasWholesaleEnabled:   row.Haswholesaleenabled,
-			WholesalePrice:        wholesalePrice,
-			WholesaleMinQty:       wholesaleMinQty,
+			WholesalePrice:        row.Wholesaleprice.Int64,
+			WholesaleMinQty:       row.Wholesaleminquantity.Int32,
 			HasWholesaleDiscount:  row.Haswholesalediscount,
-			WholesaleDiscount:     wholesaleDiscount,
-			WholesaleDiscountType: wholesaleDiscountType,
+			WholesaleDiscount:     row.Wholesalediscount.Int64,
+			WholesaleDiscountType: row.Wholesalediscounttype.String,
 			WeightGrams:           row.WeightGrams,
-			QuantityInCart:        quantityInCart,
+			QuantityInCart:        row.CartRequiredQuantity.Int32,
 		}
 
-		// ✅ Add variant to product (via pointer)
-		prodPtr := productMap[row.Sellerid][row.Productid]
-		prodPtr.Variants = append(prodPtr.Variants, variant)
+		productMap[row.Sellerid][row.Productid].Variants = append(productMap[row.Sellerid][row.Productid].Variants, variant)
 	}
 
-	// Collect final grouped valid items
+	// Final result
 	var validItems []CartGroupedBySeller
 	for _, seller := range grouped {
 		validItems = append(validItems, *seller)

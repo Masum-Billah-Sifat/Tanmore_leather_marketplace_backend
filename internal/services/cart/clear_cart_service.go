@@ -1,39 +1,35 @@
 // ------------------------------------------------------------
 // 📁 File: internal/services/cart/clear_cart_service.go
 // 🧠 Handles clearing all active items from a customer's cart.
-//     - Validates the user (not archived or banned)
-//     - Soft-deletes (deactivates) all active cart rows for user
-//     - Returns a result indicating cart cleared or already empty
+//     - Validates the user (if logged in)
+//     - Soft-deletes (deactivates) all active cart rows for user or guest
+//     - Returns a result indicating cart cleared
 
 package cart
 
 import (
 	"context"
-	"database/sql"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/cart/clear_cart"
 	"tanmore_backend/pkg/errors"
+	"tanmore_backend/pkg/sqlnull"
 	"tanmore_backend/pkg/timeutil"
-
-	// "database/sql" // <-- Ensure this is imported for sql.NullInt32
 
 	"github.com/google/uuid"
 )
 
-// ------------------------------------------------------------
 // 📥 Input from handler
 type ClearCartInput struct {
-	UserID uuid.UUID
+	UserID      *uuid.UUID
+	GuestUserID *uuid.UUID
 }
 
-// ------------------------------------------------------------
 // 📤 Result returned
 type ClearCartResult struct {
 	Status string // "cart_cleared"
 }
 
-// ------------------------------------------------------------
 // 🧱 Dependencies
 type ClearCartServiceDeps struct {
 	Repo repo.ClearCartRepoInterface
@@ -56,32 +52,39 @@ func (s *ClearCartService) Start(
 ) (*ClearCartResult, error) {
 
 	now := timeutil.NowUTC()
-
-	// Default result
-	result := &ClearCartResult{Status: "cart_cleared"}
+	result := &ClearCartResult{
+		Status: "cart_cleared",
+	}
 
 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-		// Step 1: Validate user
-		user, err := q.GetUserByID(ctx, input.UserID)
-		if err != nil {
-			return errors.NewNotFoundError("user")
-		}
-		if user.IsArchived {
-			return errors.NewAuthError("user is archived")
-		}
-		if user.IsBanned {
-			return errors.NewAuthError("user is banned")
+		// Step 1️⃣: Validate user ONLY if logged in
+		if input.UserID != nil {
+			user, err := q.GetUserByID(ctx, *input.UserID)
+			if err != nil {
+				return errors.NewNotFoundError("user")
+			}
+			if user.IsArchived {
+				return errors.NewAuthError("user is archived")
+			}
+			if user.IsBanned {
+				return errors.NewAuthError("user is banned")
+			}
 		}
 
-		// Step 2: Clear cart items
-		err = q.ClearCartItemsForUser(ctx, sqlc.ClearCartItemsForUserParams{
-			UserID:    input.UserID,
-			IsActive:  false,
-			UpdatedAt: now,
-			RequiredQuantity: sql.NullInt32{
-				Valid: false, // sets to NULL
-			},
-		})
+		// Step 2️⃣: Clear cart based on user or guest
+		var err error
+		if input.UserID != nil {
+			err = q.ClearCartItemsByUser(ctx, sqlc.ClearCartItemsByUserParams{
+				UserID:    sqlnull.UUIDPtr(input.UserID),
+				UpdatedAt: now,
+			})
+		} else {
+			err = q.ClearCartItemsByGuest(ctx, sqlc.ClearCartItemsByGuestParams{
+				GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
+				UpdatedAt:   now,
+			})
+		}
+
 		if err != nil {
 			return errors.NewTableError("cart_items.clear", err.Error())
 		}

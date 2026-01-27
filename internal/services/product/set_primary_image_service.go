@@ -12,6 +12,7 @@ package product
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/product/product_set_primary_image"
@@ -57,74 +58,98 @@ func NewSetPrimaryImageService(deps SetPrimaryImageServiceDeps) *SetPrimaryImage
 	return &SetPrimaryImageService{Deps: deps}
 }
 
-// 🚀 Entrypoint
 func (s *SetPrimaryImageService) Start(
 	ctx context.Context,
 	input SetPrimaryImageInput,
 ) (*SetPrimaryImageResult, error) {
+
+	log.Println("🟡 [SetPrimary] START",
+		"user_id=", input.UserID,
+		"product_id=", input.ProductID,
+		"media_id=", input.MediaID,
+	)
+
 	now := timeutil.NowUTC()
 
 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
+
 		// ------------------------------------------------------------
-		// Step 1: Validate seller
+		log.Println("🟢 [SetPrimary] Step 1: Validate seller")
+
 		user, err := q.GetUserByID(ctx, input.UserID)
 		if err != nil {
+			log.Println("❌ [SetPrimary] User not found", err)
 			return errors.NewNotFoundError("user")
 		}
-		if user.IsArchived {
-			return errors.NewAuthError("user is archived")
+
+		if user.IsArchived || user.IsBanned {
+			log.Println("❌ [SetPrimary] Seller invalid")
+			return errors.NewAuthError("seller invalid")
 		}
-		if user.IsBanned {
-			return errors.NewAuthError("user is banned")
-		}
-		if !user.IsSellerProfileCreated || !user.IsSellerProfileApproved {
-			return errors.NewValidationError("seller", "profile not approved or not created")
+		if !user.IsSellerProfileApproved {
+			log.Println("❌ [SetPrimary] Seller not approved")
+			return errors.NewValidationError("seller", "profile not approved")
 		}
 
 		// ------------------------------------------------------------
-		// Step 2: Validate product ownership
+		log.Println("🟢 [SetPrimary] Step 2: Validate product ownership")
+
 		product, err := q.GetProductByIDAndSellerID(ctx, sqlc.GetProductByIDAndSellerIDParams{
 			ID:       input.ProductID,
 			SellerID: input.UserID,
 		})
 		if err != nil {
+			log.Println("❌ [SetPrimary] Product not found", err)
 			return errors.NewNotFoundError("product")
 		}
+
 		if product.IsArchived || product.IsBanned {
-			return errors.NewValidationError("product", "banned or archived product")
+			log.Println("❌ [SetPrimary] Product archived/banned")
+			return errors.NewValidationError("product", "banned or archived")
 		}
 
 		// ------------------------------------------------------------
-		// Step 3: Fetch media row
+		log.Println("🟢 [SetPrimary] Step 3: Fetch image media")
+
 		media, err := q.GetProductMediaByID(ctx, sqlc.GetProductMediaByIDParams{
 			ID:        input.MediaID,
 			ProductID: input.ProductID,
-			MediaType: "image", // ensure type match
+			MediaType: "image",
 		})
 		if err != nil {
+			log.Println("❌ [SetPrimary] Media not found", err)
 			return errors.NewNotFoundError("media")
 		}
+
+		log.Println("ℹ️ [SetPrimary] Media state",
+			"is_archived=", media.IsArchived,
+			"is_primary=", media.IsPrimary,
+		)
+
 		if media.IsArchived {
-			return errors.NewValidationError("media", "cannot set archived image as primary")
+			return errors.NewValidationError("media", "cannot set archived image")
 		}
 		if media.IsPrimary {
-			return errors.NewConflictError("media")
+			return errors.NewConflictError("media already primary")
 		}
 
 		// ------------------------------------------------------------
-		// Step 3: Unset all previous is_primary flags
+		log.Println("🟢 [SetPrimary] Step 4: Unset previous primary")
+
 		err = q.UnsetAllPrimaryImages(ctx, sqlc.UnsetAllPrimaryImagesParams{
 			ProductID:  input.ProductID,
 			MediaType:  "image",
 			IsArchived: false,
-			IsPrimary:  false, // New value
+			IsPrimary:  false,
 		})
 		if err != nil {
-			return errors.NewTableError("product_medias.unset_primary", err.Error())
+			log.Println("❌ [SetPrimary] Failed unsetting primary", err)
+			return errors.NewTableError("unset_primary", err.Error())
 		}
 
 		// ------------------------------------------------------------
-		// Step 4: Set selected image as primary
+		log.Println("🟢 [SetPrimary] Step 5: Set new primary")
+
 		err = q.SetAsPrimaryImage(ctx, sqlc.SetAsPrimaryImageParams{
 			ID:        input.MediaID,
 			ProductID: input.ProductID,
@@ -132,22 +157,22 @@ func (s *SetPrimaryImageService) Start(
 			IsPrimary: true,
 		})
 		if err != nil {
-			return errors.NewTableError("product_medias.set_primary", err.Error())
+			log.Println("❌ [SetPrimary] Failed setting primary", err)
+			return errors.NewTableError("set_primary", err.Error())
 		}
 
-		// ------------------------------------------------------------
-		// Step 5: Emit event
+		log.Println("🟢 [SetPrimary] Step 6: Emit event")
+
 		payload := map[string]interface{}{
 			"user_id":    input.UserID,
 			"product_id": input.ProductID,
 			"media_id":   input.MediaID,
-			"media_url":  media.MediaUrl, // ✅ include it
-
+			"media_url":  media.MediaUrl,
 		}
 
 		payloadBytes, err := json.Marshal(payload)
 		if err != nil {
-			return errors.NewServerError("marshal event payload")
+			return errors.NewServerError("marshal payload")
 		}
 
 		err = q.InsertEvent(ctx, sqlc.InsertEventParams{
@@ -159,13 +184,16 @@ func (s *SetPrimaryImageService) Start(
 			CreatedAt:    now,
 		})
 		if err != nil {
+			log.Println("❌ [SetPrimary] Failed inserting event", err)
 			return errors.NewTableError("events.insert", err.Error())
 		}
 
+		log.Println("✅ [SetPrimary] SUCCESS")
 		return nil
 	})
 
 	if err != nil {
+		log.Println("🔥 [SetPrimary] TX FAILED:", err)
 		return nil, err
 	}
 
@@ -175,3 +203,122 @@ func (s *SetPrimaryImageService) Start(
 		Status:         "primary_image_set",
 	}, nil
 }
+
+// // 🚀 Entrypoint
+// func (s *SetPrimaryImageService) Start(
+// 	ctx context.Context,
+// 	input SetPrimaryImageInput,
+// ) (*SetPrimaryImageResult, error) {
+// 	now := timeutil.NowUTC()
+
+// 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
+// 		// ------------------------------------------------------------
+// 		// Step 1: Validate seller
+// 		user, err := q.GetUserByID(ctx, input.UserID)
+// 		if err != nil {
+// 			return errors.NewNotFoundError("user")
+// 		}
+// 		if user.IsArchived {
+// 			return errors.NewAuthError("user is archived")
+// 		}
+// 		if user.IsBanned {
+// 			return errors.NewAuthError("user is banned")
+// 		}
+// 		if !user.IsSellerProfileCreated || !user.IsSellerProfileApproved {
+// 			return errors.NewValidationError("seller", "profile not approved or not created")
+// 		}
+
+// 		// ------------------------------------------------------------
+// 		// Step 2: Validate product ownership
+// 		product, err := q.GetProductByIDAndSellerID(ctx, sqlc.GetProductByIDAndSellerIDParams{
+// 			ID:       input.ProductID,
+// 			SellerID: input.UserID,
+// 		})
+// 		if err != nil {
+// 			return errors.NewNotFoundError("product")
+// 		}
+// 		if product.IsArchived || product.IsBanned {
+// 			return errors.NewValidationError("product", "banned or archived product")
+// 		}
+
+// 		// ------------------------------------------------------------
+// 		// Step 3: Fetch media row
+// 		media, err := q.GetProductMediaByID(ctx, sqlc.GetProductMediaByIDParams{
+// 			ID:        input.MediaID,
+// 			ProductID: input.ProductID,
+// 			MediaType: "image", // ensure type match
+// 		})
+// 		if err != nil {
+// 			return errors.NewNotFoundError("media")
+// 		}
+// 		if media.IsArchived {
+// 			return errors.NewValidationError("media", "cannot set archived image as primary")
+// 		}
+// 		if media.IsPrimary {
+// 			return errors.NewConflictError("media")
+// 		}
+
+// 		// ------------------------------------------------------------
+// 		// Step 3: Unset all previous is_primary flags
+// 		err = q.UnsetAllPrimaryImages(ctx, sqlc.UnsetAllPrimaryImagesParams{
+// 			ProductID:  input.ProductID,
+// 			MediaType:  "image",
+// 			IsArchived: false,
+// 			IsPrimary:  false, // New value
+// 		})
+// 		if err != nil {
+// 			return errors.NewTableError("product_medias.unset_primary", err.Error())
+// 		}
+
+// 		// ------------------------------------------------------------
+// 		// Step 4: Set selected image as primary
+// 		err = q.SetAsPrimaryImage(ctx, sqlc.SetAsPrimaryImageParams{
+// 			ID:        input.MediaID,
+// 			ProductID: input.ProductID,
+// 			MediaType: "image",
+// 			IsPrimary: true,
+// 		})
+// 		if err != nil {
+// 			return errors.NewTableError("product_medias.set_primary", err.Error())
+// 		}
+
+// 		// ------------------------------------------------------------
+// 		// Step 5: Emit event
+// 		payload := map[string]interface{}{
+// 			"user_id":    input.UserID,
+// 			"product_id": input.ProductID,
+// 			"media_id":   input.MediaID,
+// 			"media_url":  media.MediaUrl, // ✅ include it
+
+// 		}
+
+// 		payloadBytes, err := json.Marshal(payload)
+// 		if err != nil {
+// 			return errors.NewServerError("marshal event payload")
+// 		}
+
+// 		err = q.InsertEvent(ctx, sqlc.InsertEventParams{
+// 			ID:           uuidutil.New(),
+// 			Userid:       input.UserID,
+// 			EventType:    "product.image.set_primary",
+// 			EventPayload: payloadBytes,
+// 			DispatchedAt: sqlnull.TimePtr(nil),
+// 			CreatedAt:    now,
+// 		})
+// 		if err != nil {
+// 			return errors.NewTableError("events.insert", err.Error())
+// 		}
+
+// 		return nil
+// 	})
+
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	return &SetPrimaryImageResult{
+// 		ProductID:      input.ProductID,
+// 		PrimaryImageID: input.MediaID,
+// 		Status:         "primary_image_set",
+// 	}, nil
+// }

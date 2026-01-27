@@ -1,7 +1,7 @@
 // ------------------------------------------------------------
 // 📁 File: internal/repository/cart/update_cart_quantity/update_cart_quantity_repository.go
 // 🧠 Concrete implementation of UpdateCartQuantityRepoInterface.
-//     Handles moderation, snapshot check, cart lookup, and quantity update.
+//     Supports user and guest cart item updates.
 
 package update_cart_quantity
 
@@ -10,6 +10,7 @@ import (
 	"database/sql"
 
 	"tanmore_backend/internal/db/sqlc"
+	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
@@ -64,18 +65,52 @@ func (r *UpdateCartQuantityRepository) GetVariantSnapshotByVariantID(
 	return r.q.GetVariantSnapshotByVariantID(ctx, variantID)
 }
 
-// 🛒 Find existing cart item
+// // 🛒 Fetch cart item by user or guest + variant
+// func (r *UpdateCartQuantityRepository) GetCartItemByOwnerAndVariant(
+// 	ctx context.Context,
+// 	arg sqlc.GetCartItemByOwnerAndVariantParams,
+// ) (sqlc.GetCartItemByOwnerAndVariantRow, error) {
+// 	return r.q.GetCartItemByOwnerAndVariant(ctx, arg)
+// }
+
+// // 🔄 Update cart quantity for user or guest
+// func (r *UpdateCartQuantityRepository) UpdateCartQuantity(
+// 	ctx context.Context,
+// 	arg sqlc.UpdateCartQuantityParams,
+// ) error {
+// 	return r.q.UpdateCartQuantity(ctx, arg)
+// }
+
 func (r *UpdateCartQuantityRepository) GetCartItemByUserAndVariant(
 	ctx context.Context,
-	arg sqlc.GetCartItemByUserAndVariantParams,
-) (sqlc.CartItem, error) {
-	return r.q.GetCartItemByUserAndVariant(ctx, arg)
+	userID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByUserAndVariantRow, error) {
+	return r.q.GetCartItemByUserAndVariant(ctx, sqlc.GetCartItemByUserAndVariantParams{
+		UserID: sqlnull.UUID(userID), VariantID: variantID,
+	})
 }
 
-// 🔄 Update quantity
-func (r *UpdateCartQuantityRepository) UpdateCartQuantity(
+func (r *UpdateCartQuantityRepository) GetCartItemByGuestAndVariant(
 	ctx context.Context,
-	arg sqlc.UpdateCartQuantityParams,
+	guestUserID uuid.UUID,
+	variantID uuid.UUID,
+) (sqlc.GetCartItemByGuestAndVariantRow, error) {
+	return r.q.GetCartItemByGuestAndVariant(ctx, sqlc.GetCartItemByGuestAndVariantParams{
+		GuestUserID: sqlnull.UUID(guestUserID), VariantID: variantID,
+	})
+}
+
+func (r *UpdateCartQuantityRepository) UpdateCartQuantityForUser(
+	ctx context.Context,
+	arg sqlc.UpdateCartQuantityForUserParams,
 ) error {
-	return r.q.UpdateCartQuantity(ctx, arg)
+	return r.q.UpdateCartQuantityForUser(ctx, arg)
+}
+
+func (r *UpdateCartQuantityRepository) UpdateCartQuantityForGuest(
+	ctx context.Context,
+	arg sqlc.UpdateCartQuantityForGuestParams,
+) error {
+	return r.q.UpdateCartQuantityForGuest(ctx, arg)
 }

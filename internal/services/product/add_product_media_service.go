@@ -99,10 +99,10 @@ func (s *AddProductMediaService) Start(
 
 		// ------------------------------------------------------------
 		// Step 3: Check if promo video already exists
-		if input.MediaType == "promo_video" {
+		if input.MediaType == "video" {
 			_, err := q.GetPromoVideoByProductID(ctx, sqlc.GetPromoVideoByProductIDParams{
 				ProductID:  input.ProductID,
-				MediaType:  "promo_video",
+				MediaType:  "video",
 				IsArchived: false,
 			})
 			if err == nil {

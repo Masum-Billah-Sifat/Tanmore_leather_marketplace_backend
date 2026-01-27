@@ -395,3 +395,53 @@ SET
     isproductarchived = true,
     updatedat = $1
 WHERE productid = $2;
+
+
+-- name: GetProductDetailByProductID :many
+SELECT
+    id,
+
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productimages,
+    productpromovideourl,
+
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    retaildiscounttype,
+    retaildiscount,
+    has_retail_discount,
+
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    weight_grams,
+    views,
+    createdat,
+    updatedat
+FROM product_variant_indexes
+WHERE
+    productid = $1;
