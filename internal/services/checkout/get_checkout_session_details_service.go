@@ -32,10 +32,11 @@ type GetCheckoutSessionDetailsInput struct {
 // 📤 Output
 
 type CheckoutSessionDetailsResult struct {
-	CheckoutSession sqlc.CheckoutSession                  `json:"checkout_session"`
-	ShippingAddress *sqlc.ShippingAddress                 `json:"shipping_address,omitempty"`
-	ValidItems      []sqlc.GetCheckoutItemsBySessionIDRow `json:"valid_items"`
-	InvalidItems    []InvalidCheckoutItem                 `json:"invalid_items"`
+	CheckoutSession           sqlc.CheckoutSession                  `json:"checkout_session"`
+	HasShippingAddressDetails bool                                  `json:"has_shipping_address_details"`
+	ShippingAddress           *sqlc.ShippingAddress                 `json:"shipping_address,omitempty"`
+	ValidItems                []sqlc.GetCheckoutItemsBySessionIDRow `json:"valid_items"`
+	InvalidItems              []InvalidCheckoutItem                 `json:"invalid_items"`
 }
 
 type InvalidCheckoutItem struct {
@@ -59,11 +60,11 @@ func NewGetCheckoutSessionDetailsService(deps GetCheckoutSessionDetailsServiceDe
 	return &GetCheckoutSessionDetailsService{Deps: deps}
 }
 
-// 🚀 Entry Point
 func (s *GetCheckoutSessionDetailsService) Start(
 	ctx context.Context,
 	input GetCheckoutSessionDetailsInput,
 ) (*CheckoutSessionDetailsResult, error) {
+
 	// Step 1: Validate customer
 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
 	if err != nil {
@@ -82,15 +83,18 @@ func (s *GetCheckoutSessionDetailsService) Start(
 		return nil, errors.NewNotFoundError("checkout_session")
 	}
 	if session.UserID != input.UserID {
-		return nil, errors.NewServerError("checkout session does not belong to user")
+		return nil, errors.NewAuthError("forbidden")
 	}
+
 	if session.Status != "ready_to_order" && session.Status != "awaiting_shipping_info" {
 		return nil, errors.NewServerError("invalid checkout session status")
 	}
 
 	// Step 3: Load shipping address (if present)
+	hasShipping := session.ShippingAddressID.Valid
+
 	var shippingAddress *sqlc.ShippingAddress
-	if session.ShippingAddressID.Valid {
+	if hasShipping {
 		addr, err := s.Deps.Repo.GetShippingAddressByIDAndCheckoutID(ctx, sqlc.GetShippingAddressByIDAndCheckoutIDParams{
 			ID:                session.ShippingAddressID.UUID,
 			CheckoutSessionID: session.ID,
@@ -121,7 +125,6 @@ func (s *GetCheckoutSessionDetailsService) Start(
 		return nil, errors.NewServerError("could not enrich checkout items")
 	}
 
-	// Build snapshot lookup map
 	snapshotMap := make(map[uuid.UUID]sqlc.GetProductVariantSnapshotsByVariantIDsRow)
 	for _, snap := range snapshots {
 		snapshotMap[snap.Variantid] = snap
@@ -143,48 +146,32 @@ func (s *GetCheckoutSessionDetailsService) Start(
 		switch {
 		case snap.Issellerbanned:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "seller_banned"))
-
 		case snap.Issellerarchived:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "seller_archived"))
-
 		case !snap.Issellerapproved:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "seller_not_approved"))
-
 		case snap.Isproductbanned:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "product_banned"))
-
 		case snap.Isproductarchived:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "product_archived"))
-
 		case !snap.Isproductapproved:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "product_not_approved"))
-
 		case snap.Iscategoryarchived:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "category_archived"))
-
 		case snap.Isvariantarchived:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "variant_archived"))
-
 		case !snap.Isvariantinstock || snap.Stockamount < item.RequiredQuantity:
 			invalidItems = append(invalidItems, toInvalid(item.VariantID, "variant_out_of_stock"))
-
 		default:
-			// ✅ item is already the correct SQLC row type
 			validItems = append(validItems, item)
 		}
 	}
 
 	return &CheckoutSessionDetailsResult{
-		CheckoutSession: session,
-		ShippingAddress: shippingAddress,
-		ValidItems:      validItems,
-		InvalidItems:    invalidItems,
+		CheckoutSession:           session,
+		HasShippingAddressDetails: hasShipping,
+		ShippingAddress:           shippingAddress,
+		ValidItems:                validItems,
+		InvalidItems:              invalidItems,
 	}, nil
 }
-
-// func toInvalid(variantID uuid.UUID, reason string) InvalidCheckoutItem {
-// 	return InvalidCheckoutItem{
-// 		VariantID: variantID,
-// 		Reason:    reason,
-// 	}
-// }

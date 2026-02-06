@@ -34,11 +34,16 @@ func NewArchiveReviewReplyHandler(service *service.ArchiveReviewReplyService) *A
 func (h *ArchiveReviewReplyHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract seller_user_id from context
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
+		return
+	}
+
 	sellerUserID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, err)
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 

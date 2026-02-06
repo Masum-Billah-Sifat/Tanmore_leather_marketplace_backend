@@ -35,28 +35,18 @@ func NewCreateSellerProfileHandler(service *service.CreateSellerProfileService) 
 func (h *CreateSellerProfileHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user_id from context
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
 	if rawUserID == nil {
-		response.Unauthorized(w, errors.NewAuthError("missing user context"))
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
-	userIDStr, ok := rawUserID.(string)
-	if !ok {
-		response.Unauthorized(w, errors.NewAuthError("invalid user context"))
-		return
-	}
-
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, errors.NewAuthError("invalid user id"))
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
-	// if err != nil {
-	// 	response.Unauthorized(w, errors.NewAuthError("invalid or missing user token"))
-	// 	return
-	// }
 
 	// 2️⃣ Parse request JSON body
 	var req struct {

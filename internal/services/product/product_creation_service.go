@@ -56,13 +56,6 @@ type CreateProductInput struct {
 	Variants      []CreateProductVariantInput
 }
 
-// ------------------------------------------------------------
-// 📦 Result returned to handler
-// type CreateProductResult struct {
-// 	ProductID  uuid.UUID
-// 	VariantIDs []uuid.UUID
-// }
-
 type CreateProductResult struct {
 	Product ProductPayload `json:"product"`
 }
@@ -342,11 +335,6 @@ func (s *CreateProductService) Start(
 	if err != nil {
 		return nil, err
 	}
-
-	// return &CreateProductResult{
-	// 	ProductID:  productID,
-	// 	VariantIDs: variantIDs,
-	// }, nil
 
 	// 🔁 Transform to output format
 	var variantsOutput []VariantPayload

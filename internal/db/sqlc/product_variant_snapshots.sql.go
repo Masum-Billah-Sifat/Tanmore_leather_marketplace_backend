@@ -630,6 +630,120 @@ func (q *Queries) GetVariantSnapshotByVariantID(ctx context.Context, variantid u
 	return i, err
 }
 
+const getVariantSnapshotsByVariantIDs = `-- name: GetVariantSnapshotsByVariantIDs :many
+SELECT
+    id,
+
+    -- Category info
+    categoryid,
+    iscategoryarchived,
+    categoryname,
+
+    -- Seller info
+    sellerid,
+    issellerapproved,
+    issellerarchived,
+    issellerbanned,
+    sellerstorename,
+
+    -- Product info
+    productid,
+    isproductapproved,
+    isproductarchived,
+    isproductbanned,
+    producttitle,
+    productdescription,
+    productprimaryimageurl,
+
+    -- Variant info
+    variantid,
+    isvariantarchived,
+    isvariantinstock,
+    stockamount,
+    color,
+    size,
+    retailprice,
+
+    -- Retail discount (optional)
+    hasretaildiscount,
+    retaildiscounttype,
+    retaildiscount,
+
+    -- Wholesale (optional)
+    haswholesaleenabled,
+    wholesaleprice,
+    wholesaleminquantity,
+    haswholesalediscount,
+    wholesalediscounttype,
+    wholesalediscount,
+
+    -- Weight and timestamps
+    weight_grams,
+    createdat,
+    updatedat
+FROM product_variant_snapshots
+WHERE variantid = ANY($1::UUID[])
+`
+
+func (q *Queries) GetVariantSnapshotsByVariantIDs(ctx context.Context, variantIds []uuid.UUID) ([]ProductVariantSnapshot, error) {
+	rows, err := q.db.QueryContext(ctx, getVariantSnapshotsByVariantIDs, pq.Array(variantIds))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ProductVariantSnapshot
+	for rows.Next() {
+		var i ProductVariantSnapshot
+		if err := rows.Scan(
+			&i.ID,
+			&i.Categoryid,
+			&i.Iscategoryarchived,
+			&i.Categoryname,
+			&i.Sellerid,
+			&i.Issellerapproved,
+			&i.Issellerarchived,
+			&i.Issellerbanned,
+			&i.Sellerstorename,
+			&i.Productid,
+			&i.Isproductapproved,
+			&i.Isproductarchived,
+			&i.Isproductbanned,
+			&i.Producttitle,
+			&i.Productdescription,
+			&i.Productprimaryimageurl,
+			&i.Variantid,
+			&i.Isvariantarchived,
+			&i.Isvariantinstock,
+			&i.Stockamount,
+			&i.Color,
+			&i.Size,
+			&i.Retailprice,
+			&i.Hasretaildiscount,
+			&i.Retaildiscounttype,
+			&i.Retaildiscount,
+			&i.Haswholesaleenabled,
+			&i.Wholesaleprice,
+			&i.Wholesaleminquantity,
+			&i.Haswholesalediscount,
+			&i.Wholesalediscounttype,
+			&i.Wholesalediscount,
+			&i.WeightGrams,
+			&i.Createdat,
+			&i.Updatedat,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const insertProductVariantSnapshot = `-- name: InsertProductVariantSnapshot :exec
 INSERT INTO product_variant_snapshots (
     id,

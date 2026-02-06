@@ -35,18 +35,16 @@ func NewReviewCheckoutHandler(service *service.ReviewCheckoutService) *ReviewChe
 func (h *ReviewCheckoutHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user ID from access token
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
 	if rawUserID == nil {
-		fmt.Println("❌ Missing user ID in context")
-		response.Unauthorized(w, errors.NewAuthError("unauthorized"))
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
 	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		fmt.Println("❌ Invalid user ID format:", err)
-		response.Unauthorized(w, err)
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 

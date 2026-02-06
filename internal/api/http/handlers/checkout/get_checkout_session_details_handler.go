@@ -35,17 +35,16 @@ func NewGetCheckoutSessionDetailsHandler(service *service.GetCheckoutSessionDeta
 func (h *GetCheckoutSessionDetailsHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user ID from access token (middleware must set it)
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
 	if rawUserID == nil {
-		fmt.Println("❌ Missing user ID in context")
-		response.Unauthorized(w, errors.NewAuthError("unauthorized"))
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
+
 	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		fmt.Println("❌ Invalid user ID format:", err)
-		response.Unauthorized(w, err)
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 
@@ -70,9 +69,11 @@ func (h *GetCheckoutSessionDetailsHandler) Handle(w http.ResponseWriter, r *http
 
 	// 4️⃣ Return response
 	response.OK(w, "Checkout session details fetched successfully", map[string]interface{}{
-		"checkout_session": result.CheckoutSession,
-		"shipping_address": result.ShippingAddress,
-		"valid_items":      result.ValidItems,
-		"invalid_items":    result.InvalidItems,
+		"checkout_session":             result.CheckoutSession,
+		"has_shipping_address_details": result.HasShippingAddressDetails,
+		"shipping_address":             result.ShippingAddress,
+		"valid_items":                  result.ValidItems,
+		"invalid_items":                result.InvalidItems,
 	})
+
 }

@@ -46,7 +46,9 @@ type CheckoutRepoInterface interface {
 		ctx context.Context,
 	) ([]sqlc.GetActivePlatformPromotionsRow, error)
 
-	// GetActivePlatformPromotions(
-	// 	ctx context.Context,
-	// ) ([]sqlc.PlatformPromotion, error)
+	// 📦 Snapshots-only (for Buy Now / From Product)
+	GetVariantSnapshotsByVariantIDs(
+		ctx context.Context,
+		variantIDs []uuid.UUID,
+	) ([]sqlc.ProductVariantSnapshot, error)
 }

@@ -71,14 +71,15 @@ func (s *CreateSellerProfileService) Start(
 		// ------------------------------------------------------------
 		// Step 1: Validate user
 		user, err := q.GetUserByID(ctx, input.UserID)
+
 		if err != nil {
-			return errors.NewNotFoundError("user")
+			return errors.ErrAuthUserNotFound()
 		}
 		if user.IsArchived {
-			return errors.NewAuthError("user is archived")
+			return errors.ErrAuthArchivedUser()
 		}
 		if user.IsBanned {
-			return errors.NewAuthError("user is banned")
+			return errors.ErrAuthBannedUser()
 		}
 		if user.IsSellerProfileCreated {
 			return errors.NewValidationError("seller_profile", "already created")

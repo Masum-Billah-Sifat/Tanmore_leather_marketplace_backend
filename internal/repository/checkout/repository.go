@@ -65,22 +65,6 @@ func (r *CheckoutRepository) GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 	return r.q.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, arg)
 }
 
-// // 🧾 Insert checkout session (exec-only)
-// func (r *CheckoutRepository) InsertCheckoutSession(
-// 	ctx context.Context,
-// 	arg sqlc.InsertCheckoutSessionParams,
-// ) error {
-// 	return r.q.InsertCheckoutSession(ctx, arg)
-// }
-
-// // 📄 Insert checkout item (exec-only)
-// func (r *CheckoutRepository) InsertCheckoutItem(
-// 	ctx context.Context,
-// 	arg sqlc.InsertCheckoutItemParams,
-// ) error {
-// 	return r.q.InsertCheckoutItem(ctx, arg)
-// }
-
 // 🧾 Insert checkout session (exec-only)
 func (r *CheckoutRepository) InsertCheckoutSession(
 	ctx context.Context,
@@ -99,15 +83,15 @@ func (r *CheckoutRepository) InsertCheckoutItem(
 	return err
 }
 
-// // 🎁 Fetch active platform-level promotions
-// func (r *CheckoutRepository) GetActivePlatformPromotions(
-// 	ctx context.Context,
-// ) ([]sqlc.PlatformPromotion, error) {
-// 	return r.q.GetActivePlatformPromotions(ctx)
-// }
-
 func (r *CheckoutRepository) GetActivePlatformPromotions(
 	ctx context.Context,
 ) ([]sqlc.GetActivePlatformPromotionsRow, error) {
 	return r.q.GetActivePlatformPromotions(ctx)
+}
+
+func (r *CheckoutRepository) GetVariantSnapshotsByVariantIDs(
+	ctx context.Context,
+	variantIDs []uuid.UUID,
+) ([]sqlc.ProductVariantSnapshot, error) {
+	return r.q.GetVariantSnapshotsByVariantIDs(ctx, variantIDs)
 }

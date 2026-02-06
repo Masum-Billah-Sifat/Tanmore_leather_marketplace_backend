@@ -36,15 +36,16 @@ func NewAddShippingAddressHandler(service *checkout.AddShippingAddressService) *
 func (h *AddShippingAddressHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user_id from context (must be authenticated)
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
 	if rawUserID == nil {
-		response.Unauthorized(w, errors.NewAuthError("unauthenticated access"))
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
+
 	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, errors.NewAuthError("invalid user ID"))
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 

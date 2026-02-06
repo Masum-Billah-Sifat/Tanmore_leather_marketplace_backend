@@ -34,17 +34,16 @@ func NewGetAllProductsBySellerHandler(
 func (h *GetAllProductsBySellerHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user_id from context (string)
-	userIDStr, ok := ctx.Value(token.CtxUserIDKey).(string)
-	if !ok || userIDStr == "" {
-		response.Unauthorized(w, errors.NewAuthError("missing or invalid access token"))
+	// Step 1️⃣: Extract user ID from access token context
+	rawUserID := ctx.Value(token.CtxUserIDKey)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
-	// 2️⃣ Parse UUID
-	userID, err := uuid.Parse(userIDStr)
+	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, errors.NewAuthError("invalid user id in token"))
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 

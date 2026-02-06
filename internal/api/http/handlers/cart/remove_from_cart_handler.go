@@ -1,86 +1,10 @@
-// // ------------------------------------------------------------
-// // 📁 File: internal/api/http/handlers/cart/remove_cart_item_handler.go
-// // 🧠 Handles DELETE /api/cart/remove/{variant_id}
-
-// package cart
-
-// import (
-// 	"net/http"
-
-// 	service "tanmore_backend/internal/services/cart"
-// 	"tanmore_backend/pkg/errors"
-// 	"tanmore_backend/pkg/response"
-// 	"tanmore_backend/pkg/token"
-
-// 	"github.com/go-chi/chi/v5"
-// 	"github.com/google/uuid"
-// )
-
-// // 📦 Handler struct
-// type RemoveCartItemHandler struct {
-// 	Service *service.RemoveCartItemService
-// }
-
-// // 🏗️ Constructor
-// func NewRemoveCartItemHandler(service *service.RemoveCartItemService) *RemoveCartItemHandler {
-// 	return &RemoveCartItemHandler{Service: service}
-// }
-
-// // 🔁 DELETE /api/cart/remove/{variant_id}
-// func (h *RemoveCartItemHandler) Handle(w http.ResponseWriter, r *http.Request) {
-// 	ctx := r.Context()
-
-// 	// 1️⃣ Get customer user ID from context
-// 	rawUserID := ctx.Value(token.CtxUserIDKey)
-// 	userID, err := uuid.Parse(rawUserID.(string))
-// 	if err != nil {
-// 		response.Unauthorized(w, err)
-// 		return
-// 	}
-
-// 	// 2️⃣ Extract variant_id from path param
-// 	variantIDStr := chi.URLParam(r, "variant_id")
-// 	if variantIDStr == "" {
-// 		response.BadRequest(w, errors.NewValidationError("variant_id", "variant_id is required"))
-// 		return
-// 	}
-
-// 	// 3️⃣ Parse UUID
-// 	variantID, err := uuid.Parse(variantIDStr)
-// 	if err != nil {
-// 		response.BadRequest(w, errors.NewValidationError("variant_id", "invalid UUID format"))
-// 		return
-// 	}
-
-// 	// 4️⃣ Build service input
-// 	input := service.RemoveCartItemInput{
-// 		UserID:    userID,
-// 		VariantID: variantID,
-// 	}
-
-// 	// 5️⃣ Call service
-// 	result, err := h.Service.Start(ctx, input)
-// 	if err != nil {
-// 		response.ServerError(w, err)
-// 		return
-// 	}
-
-// 	// 6️⃣ Return success
-// 	response.OK(w, "Cart item removed", map[string]interface{}{
-// 		"variant_id": result.VariantID,
-// 		"status":     result.Status,
-// 	})
-// }
-
 // ------------------------------------------------------------
-// 📁 File: internal/api/http/handlers/cart/remove_cart_item_handler.go
-// 🧠 Handles DELETE /api/cart/remove/{variant_id}
-//     - Supports both user_id (token) and guest_user_id (header)
+// 📁 internal/api/http/handlers/cart/remove_cart_item_handler.go
+// 🔒 Authenticated only: DELETE /api/cart/remove/{variant_id}
 
 package cart
 
 import (
-	"fmt"
 	"net/http"
 
 	service "tanmore_backend/internal/services/cart"
@@ -100,74 +24,45 @@ func NewRemoveCartItemHandler(service *service.RemoveCartItemService) *RemoveCar
 	return &RemoveCartItemHandler{Service: service}
 }
 
-// 🔁 DELETE /api/cart/remove/{variant_id}
 func (h *RemoveCartItemHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user ID from token context (if any)
-	var userID *uuid.UUID
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
-	if rawUserID != nil {
-		parsed, err := uuid.Parse(rawUserID.(string))
-		if err != nil {
-			fmt.Println("❌ Failed to parse user ID:", err)
-			response.Unauthorized(w, err)
-			return
-		}
-		userID = &parsed
-		fmt.Println("✅ Parsed authenticated user ID:", *userID)
-	}
-
-	// 2️⃣ Extract guest_user_id from header (if any)
-	var guestUserID *uuid.UUID
-	guestHeader := r.Header.Get("X-Tanmore-Guest-Id")
-	if guestHeader != "" {
-		parsed, err := uuid.Parse(guestHeader)
-		if err != nil {
-			fmt.Println("❌ Invalid guest_user_id UUID:", err)
-			response.BadRequest(w, errors.NewValidationError("guest_user_id", "invalid UUID format in header"))
-			return
-		}
-		guestUserID = &parsed
-		fmt.Println("✅ Parsed guest user ID from header:", *guestUserID)
-	}
-
-	// 3️⃣ Enforce: exactly one of user_id or guest_user_id must be present
-	if (userID == nil && guestUserID == nil) || (userID != nil && guestUserID != nil) {
-		fmt.Println("❌ Must provide either user_id (token) or guest_user_id (header), but not both")
-		response.BadRequest(w, errors.NewValidationError("authorization", "either user_id or guest_user_id must be provided, not both"))
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
-	// 4️⃣ Extract variant_id from path
+	userID, err := uuid.Parse(rawUserID.(string))
+	if err != nil {
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
+		return
+	}
+
+	// 2️⃣ Extract variant_id from URL
 	variantIDStr := chi.URLParam(r, "variant_id")
 	if variantIDStr == "" {
 		response.BadRequest(w, errors.NewValidationError("variant_id", "variant_id is required"))
 		return
 	}
-
-	// 5️⃣ Parse UUID
 	variantID, err := uuid.Parse(variantIDStr)
 	if err != nil {
 		response.BadRequest(w, errors.NewValidationError("variant_id", "invalid UUID format"))
 		return
 	}
 
-	// 6️⃣ Build service input
-	input := service.RemoveCartItemInput{
-		UserID:      userID,
-		GuestUserID: guestUserID,
-		VariantID:   variantID,
-	}
-
-	// 7️⃣ Call service layer
-	result, err := h.Service.Start(ctx, input)
+	// 3️⃣ Call service
+	result, err := h.Service.Start(ctx, service.RemoveCartItemInput{
+		UserID:    userID,
+		VariantID: variantID,
+	})
 	if err != nil {
 		response.ServerError(w, err)
 		return
 	}
 
-	// 8️⃣ Return success
+	// 4️⃣ Success
 	response.OK(w, "Cart item removed", map[string]interface{}{
 		"variant_id": result.VariantID,
 		"status":     result.Status,

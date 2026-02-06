@@ -15,14 +15,12 @@ import (
 
 type CartItem struct {
 	ID               uuid.UUID     `json:"id"`
-	UserID           uuid.NullUUID `json:"user_id"`
+	UserID           uuid.UUID     `json:"user_id"`
 	VariantID        uuid.UUID     `json:"variant_id"`
 	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
 	IsActive         bool          `json:"is_active"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
-	IsDeprecated     bool          `json:"is_deprecated"`
 }
 
 type Category struct {

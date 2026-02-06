@@ -36,14 +36,18 @@ func NewAddVariantWholesaleDiscountHandler(service *service.AddWholesaleDiscount
 func (h *AddVariantWholesaleDiscountHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Get seller user ID from context
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
-	userID, err := uuid.Parse(rawUserID.(string))
-	if err != nil {
-		response.Unauthorized(w, err)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
+	userID, err := uuid.Parse(rawUserID.(string))
+	if err != nil {
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
+		return
+	}
 	// 2️⃣ Get product_id from path
 	productIDParam := chi.URLParam(r, "product_id")
 	productID, err := uuid.Parse(productIDParam)

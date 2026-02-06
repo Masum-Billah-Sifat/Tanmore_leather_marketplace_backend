@@ -10,6 +10,7 @@ import (
 	"net/http"
 
 	"tanmore_backend/internal/services/user_mode_switch"
+	"tanmore_backend/pkg/errors"
 	"tanmore_backend/pkg/response"
 	"tanmore_backend/pkg/token"
 
@@ -42,13 +43,23 @@ func (h *SwitchModeHandler) Handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 2️⃣ Extract from context
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
+		return
+	}
+
+	userID, err := uuid.Parse(rawUserID.(string))
+	if err != nil {
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
+		return
+	}
+
 	rawSessionID := ctx.Value(token.CtxSessionIDKey)
 	rawMode := ctx.Value(token.CtxModeKey)
 
 	// 3️⃣ Basic type assertions (no validation yet)
-	userID, _ := uuid.Parse(rawUserID.(string))
 	sessionID, _ := uuid.Parse(rawSessionID.(string))
 	fromMode := rawMode.(string)
 

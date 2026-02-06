@@ -35,20 +35,18 @@ func NewConfirmOrderHandler(service *service.ConfirmOrderService) *ConfirmOrderH
 func (h *ConfirmOrderHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Extract user ID from access token (middleware must set it)
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
 	if rawUserID == nil {
-		fmt.Println("❌ Missing user ID in context")
-		response.Unauthorized(w, errors.NewAuthError("unauthorized"))
-		return
-	}
-	userID, err := uuid.Parse(rawUserID.(string))
-	if err != nil {
-		fmt.Println("❌ Invalid user ID format:", err)
-		response.Unauthorized(w, err)
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
+	userID, err := uuid.Parse(rawUserID.(string))
+	if err != nil {
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
+		return
+	}
 	// 2️⃣ Parse checkout_session_id from URL
 	sessionIDStr := chi.URLParam(r, "checkout_session_id")
 	checkoutSessionID, err := uuid.Parse(sessionIDStr)

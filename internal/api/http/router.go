@@ -208,11 +208,6 @@ import (
 	repo_checkout_session "tanmore_backend/internal/repository/checkout/session_details"
 	// checkout_services "tanmore_backend/internal/services/checkout"
 
-	// 🆕 Merge Guest Cart
-	merge_cart_handlers "tanmore_backend/internal/api/http/handlers/cart"
-	merge_cart_repo "tanmore_backend/internal/repository/cart/merge_guest_cart"
-	merge_cart_services "tanmore_backend/internal/services/cart"
-
 	// 🆕 Add Shipping Address to Checkout Session
 	// checkout_handlers "tanmore_backend/internal/api/http/handlers/checkout"
 	checkout_shipping_address_add_repo "tanmore_backend/internal/repository/checkout/add_shipping_address"
@@ -451,9 +446,9 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 
 	// ------------------------------------------------------------
 	// 🛒 Add to Cart endpoint wiring
-	cartRepo := cart_repo.NewAddToCartRepository(db)
+	addToCartRepo := cart_repo.NewAddToCartRepository(db)
 	addToCartService := cart_services.NewAddToCartService(cart_services.AddToCartServiceDeps{
-		Repo: cartRepo,
+		Repo: addToCartRepo,
 	})
 	addToCartHandler := cart_handlers.NewAddToCartHandler(addToCartService)
 
@@ -623,17 +618,6 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	checkoutSessionHandler := checkout_handlers.NewGetCheckoutSessionDetailsHandler(checkoutSessionService)
 
 	// ------------------------------------------------------------
-	// 🛒 Merge Guest Cart Endpoint Wiring
-
-	mergeGuestCartRepo := merge_cart_repo.NewMergeGuestCartRepository(db)
-	mergeGuestCartService := merge_cart_services.NewMergeGuestCartService(
-		merge_cart_services.MergeGuestCartServiceDeps{
-			Repo: mergeGuestCartRepo,
-		},
-	)
-	mergeGuestCartHandler := merge_cart_handlers.NewMergeGuestCartHandler(mergeGuestCartService)
-
-	// ------------------------------------------------------------
 	// 🚚 Add Shipping Address to Checkout Setup
 	addShippingRepo := checkout_shipping_address_add_repo.NewAddShippingAddressRepository(db)
 	addShippingService := checkout_service.NewAddShippingAddressService(addShippingRepo, "YOUR_PATHAO_TOKEN", 123456) // replace with actual token + store ID
@@ -643,12 +627,6 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	// 🧾 Edit Shipping Address Setup
 
 	editShippingAddressRepo := checkout_edit_repo.NewEditShippingAddressRepository(db)
-
-	// editShippingAddressService := checkout_service.NewEditShippingAddressService(
-	// 	checkout_service.NewEditShippingAddressServiceDeps{
-	// 		Repo: editShippingAddressRepo,
-	// 	},
-	// )
 
 	editShippingAddressService := checkout_services.NewEditShippingAddressService(
 		editShippingAddressRepo,
@@ -709,10 +687,6 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	r.Get("/api/feed", feedSearchHandler.HandleFeed)
 	r.Get("/api/search", feedSearchHandler.HandleSearch)
 
-	// r.Route("/api/products", func(r chi.Router) {
-	// 	r.Get("/{product_id}", publicDetailHandler.Handle)
-	// })
-
 	// 🆕 Public Product Reviews Endpoint
 	r.Get("/api/products/{product_id}/reviews", getReviewsHandler.Handle)
 	r.Get("/api/products/{product_id}", publicDetailHandler.Handle)
@@ -723,133 +697,150 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	// 🛍️ Public route: Get all products by category
 	r.Get("/api/category-products", fetchByCategoryHandler.Handle)
 
-	r.Route("/api/seller", func(r chi.Router) {
-		r.Use(token.AttachAccessToken)
-
-		// 🧾 Create Seller Profile Metadata
-		r.Post("/profile/metadata", sellerProfileHandler.Handle)
-
-		// ✅ Create Product
-		r.Post("/products", productHandler.Handle)
-
-		// 🆕 Update Product Title and/or Description
-		r.Put("/products/{product_id}", updateProductInfoHandler.Handle)
-
-		// 🆕 Add Product Media (image or promo_video)
-		r.Post("/products/{product_id}/media", addProductMediaHandler.Handle)
-
-		// 🗑️ Unified media archive endpoint
-		r.Delete("/api/seller/products/{product_id}/media/{media_id}", archiveMediaHandler.Handle)
-
-		// PUT /api/seller/products/:product_id/images/:media_id/set-primary
-		r.Put("/products/{product_id}/images/{media_id}/set-primary", setPrimaryImageHandler.Handle)
-
-		// ✅ Archive product (soft delete)
-		r.Put("/products/{product_id}/archive", archiveProductHandler.Handle)
-
-		// ➕ Add Variant to Product
-		r.Post("/products/{product_id}/variants", addVariantHandler.Handle)
-
-		// ➖ Remove Variant from Product
-		r.Delete("/products/{product_id}/variants/{variant_id}", removeVariantHandler.Handle)
-
-		// 📝 Update Variant Info
-		r.Put("/products/{product_id}/variants/{variant_id}/info", updateVariantInfoHandler.Handle)
-
-		// 💵 Update Variant Retail Price
-		r.Put("/products/{product_id}/variants/{variant_id}/retail-price", updateRetailPriceHandler.Handle)
-
-		// 📦 Update Variant In-Stock Status
-		r.Put("/products/{product_id}/variants/{variant_id}/in-stock", updateInStockHandler.Handle)
-
-		// 📦 Update Variant Stock Quantity
-		r.Put("/products/{product_id}/variants/{variant_id}/stock-quantity", updateStockQuantityHandler.Handle)
-
-		// ⚖️ Update Variant Weight
-		r.Put("/products/{product_id}/variants/{variant_id}/weight", updateWeightHandler.Handle)
-
-		// 💸 Add Retail Discount to Variant
-		r.Post("/products/{product_id}/variants/{variant_id}/retail-discount", addRetailDiscountHandler.Handle)
-
-		// update retail discount for variant
-		r.Put("/products/{product_id}/variants/{variant_id}/retail-discount", updateRetailDiscountHandler.Handle)
-
-		// ❌ Remove retail discount from variant
-		r.Delete("/products/{product_id}/variants/{variant_id}/retail-discount", removeRetailDiscountHandler.Handle)
-
-		// 🏷️ Enable Wholesale Mode for Variant
-		r.Post(
-			"/products/{product_id}/variants/{variant_id}/wholesale-mode",
-			enableWholesaleHandler.Handle,
-		)
-
-		// ✏️ Edit Wholesale Info (price / min qty)
-		r.Put(
-			"/products/{product_id}/variants/{variant_id}/wholesale-mode",
-			editWholesaleHandler.Handle,
-		)
-
-		// ➖ Disable Wholesale Mode for Variant
-		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-mode", disableWholesaleModeHandler.Handle)
-
-		// ➕ Add Wholesale Discount to Variant
-		r.Post("/products/{product_id}/variants/{variant_id}/wholesale-discount", addWholesaleDiscountHandler.Handle)
-
-		// 🔁 Update Wholesale Discount to Variant
-		r.Put("/products/{product_id}/variants/{variant_id}/wholesale-discount", updateWholesaleDiscountHandler.Handle)
-
-		// ❌ Remove Wholesale Discount from Variant
-		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-discount", removeWholesaleDiscountHandler.Handle)
-
-		// 🆕 Fetch full detail for a seller's product
-		r.Get("/products/{product_id}", productFullDetailHandler.Handle)
-
-		// Add inside r.Route("/api/seller") block:
-		r.Get("/products", getAllProductsBySellerHandler.Handle)
-
-		// 🆕 Update Product Category
-		r.Put("/products/{product_id}/category", updateProductCategoryHandler.Handle)
-
+	r.Group(func(r chi.Router) {
+		r.Use(token.AttachAccessTokenForCustomer)
+		r.Post("/api/seller/profile/metadata", sellerProfileHandler.Handle)
 	})
 
-	// r.Route("/api/cart", func(r chi.Router) {
-	// 	r.Use(token.AttachAccessToken)
+	r.Route("/api/seller", func(r chi.Router) {
 
-	// 	r.Post("/add", addToCartHandler.Handle)
-	// 	r.Put("/update", updateCartQuantityHandler.Handle) // ⬅️ Add here
+		// // ✅ Onboarding endpoints: customer token allowed
+		// r.Group(func(r chi.Router) {
+		// 	r.Use(token.AttachAccessTokenForCustomer) // or AttachAccessTokenForCustomerOrSeller
+		// 	r.Post("/profile/metadata", sellerProfileHandler.Handle)
+		// })
 
-	// 	r.Delete("/remove/{variant_id}", removeCartHandler.Handle) // ⬅️ Remove specific item
-	// 	r.Delete("/clear", clearCartHandler.Handle)                // ⬅️ Clear entire cart
+		// ✅ Seller-only endpoints: require seller token
+		// r.Group(func(r chi.Router) {
+		r.Use(token.AttachAccessTokenForSeller)
 
-	// 	r.Get("/items", getAllCartItemsHandler.Handle) // 🆕 Get All Cart Items
-	// 	r.Post("/summary", cartSummaryHandler.Handle)  // 🆕 Cart Summary
+		r.Post("/products", productHandler.Handle)
+		r.Put("/products/{product_id}", updateProductInfoHandler.Handle)
+		r.Post("/products/{product_id}/media", addProductMediaHandler.Handle)
+		r.Delete("/products/{product_id}/media/{media_id}", archiveMediaHandler.Handle)
+		r.Put("/products/{product_id}/images/{media_id}/set-primary", setPrimaryImageHandler.Handle)
+		r.Put("/products/{product_id}/archive", archiveProductHandler.Handle)
 
-	// 	r.Post("/checkout/initiate", checkoutHandler.Handle) // 🧾 Add this line
+		r.Post("/products/{product_id}/variants", addVariantHandler.Handle)
+		r.Delete("/products/{product_id}/variants/{variant_id}", removeVariantHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/info", updateVariantInfoHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/retail-price", updateRetailPriceHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/in-stock", updateInStockHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/stock-quantity", updateStockQuantityHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/weight", updateWeightHandler.Handle)
 
-	// 	// 🆕 Merge guest cart into authenticated cart
-	// 	r.Post("/merge-guest", mergeGuestCartHandler.Handle)
+		r.Post("/products/{product_id}/variants/{variant_id}/retail-discount", addRetailDiscountHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/retail-discount", updateRetailDiscountHandler.Handle)
+		r.Delete("/products/{product_id}/variants/{variant_id}/retail-discount", removeRetailDiscountHandler.Handle)
 
-	// })
+		r.Post("/products/{product_id}/variants/{variant_id}/wholesale-mode", enableWholesaleHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/wholesale-mode", editWholesaleHandler.Handle)
+		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-mode", disableWholesaleModeHandler.Handle)
 
-	// r.Route("/api/cart", func(r chi.Router) {
-	// 	// ❌ Public endpoints (guests + logged in users)
-	// 	r.Post("/add", addToCartHandler.Handle)
-	// 	r.Put("/update", updateCartQuantityHandler.Handle)
-	// 	r.Delete("/remove/{variant_id}", removeCartHandler.Handle)
-	// 	r.Delete("/clear", clearCartHandler.Handle)
-	// 	r.Get("/items", getAllCartItemsHandler.Handle)
-	// 	r.Post("/summary", cartSummaryHandler.Handle)
-	// })
+		r.Post("/products/{product_id}/variants/{variant_id}/wholesale-discount", addWholesaleDiscountHandler.Handle)
+		r.Put("/products/{product_id}/variants/{variant_id}/wholesale-discount", updateWholesaleDiscountHandler.Handle)
+		r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-discount", removeWholesaleDiscountHandler.Handle)
 
-	// // ✅ Auth-only endpoints (requires access token)
-	// r.Route("/api/cart", func(r chi.Router) {
-	// 	r.Use(token.AttachAccessToken) // ⬅️ only for the ones below
+		r.Get("/products/{product_id}", productFullDetailHandler.Handle)
+		r.Get("/products", getAllProductsBySellerHandler.Handle)
+		r.Put("/products/{product_id}/category", updateProductCategoryHandler.Handle)
+		// })
+	})
 
-	// 	r.Post("/checkout/initiate", checkoutHandler.Handle)
-	// 	r.Post("/merge-guest", mergeGuestCartHandler.Handle)
+	// r.Route("/api/seller", func(r chi.Router) {
+	// 	r.Use(token.AttachAccessTokenForSeller)
+
+	// 	// 🧾 Create Seller Profile Metadata
+	// 	r.Post("/profile/metadata", sellerProfileHandler.Handle)
+
+	// 	// ✅ Create Product
+	// 	r.Post("/products", productHandler.Handle)
+
+	// 	// 🆕 Update Product Title and/or Description
+	// 	r.Put("/products/{product_id}", updateProductInfoHandler.Handle)
+
+	// 	// 🆕 Add Product Media (image or promo_video)
+	// 	r.Post("/products/{product_id}/media", addProductMediaHandler.Handle)
+
+	// 	// 🗑️ Unified media archive endpoint
+	// 	r.Delete("/api/seller/products/{product_id}/media/{media_id}", archiveMediaHandler.Handle)
+
+	// 	// PUT /api/seller/products/:product_id/images/:media_id/set-primary
+	// 	r.Put("/products/{product_id}/images/{media_id}/set-primary", setPrimaryImageHandler.Handle)
+
+	// 	// ✅ Archive product (soft delete)
+	// 	r.Put("/products/{product_id}/archive", archiveProductHandler.Handle)
+
+	// 	// ➕ Add Variant to Product
+	// 	r.Post("/products/{product_id}/variants", addVariantHandler.Handle)
+
+	// 	// ➖ Remove Variant from Product
+	// 	r.Delete("/products/{product_id}/variants/{variant_id}", removeVariantHandler.Handle)
+
+	// 	// 📝 Update Variant Info
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/info", updateVariantInfoHandler.Handle)
+
+	// 	// 💵 Update Variant Retail Price
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/retail-price", updateRetailPriceHandler.Handle)
+
+	// 	// 📦 Update Variant In-Stock Status
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/in-stock", updateInStockHandler.Handle)
+
+	// 	// 📦 Update Variant Stock Quantity
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/stock-quantity", updateStockQuantityHandler.Handle)
+
+	// 	// ⚖️ Update Variant Weight
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/weight", updateWeightHandler.Handle)
+
+	// 	// 💸 Add Retail Discount to Variant
+	// 	r.Post("/products/{product_id}/variants/{variant_id}/retail-discount", addRetailDiscountHandler.Handle)
+
+	// 	// update retail discount for variant
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/retail-discount", updateRetailDiscountHandler.Handle)
+
+	// 	// ❌ Remove retail discount from variant
+	// 	r.Delete("/products/{product_id}/variants/{variant_id}/retail-discount", removeRetailDiscountHandler.Handle)
+
+	// 	// 🏷️ Enable Wholesale Mode for Variant
+	// 	r.Post(
+	// 		"/products/{product_id}/variants/{variant_id}/wholesale-mode",
+	// 		enableWholesaleHandler.Handle,
+	// 	)
+
+	// 	// ✏️ Edit Wholesale Info (price / min qty)
+	// 	r.Put(
+	// 		"/products/{product_id}/variants/{variant_id}/wholesale-mode",
+	// 		editWholesaleHandler.Handle,
+	// 	)
+
+	// 	// ➖ Disable Wholesale Mode for Variant
+	// 	r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-mode", disableWholesaleModeHandler.Handle)
+
+	// 	// ➕ Add Wholesale Discount to Variant
+	// 	r.Post("/products/{product_id}/variants/{variant_id}/wholesale-discount", addWholesaleDiscountHandler.Handle)
+
+	// 	// 🔁 Update Wholesale Discount to Variant
+	// 	r.Put("/products/{product_id}/variants/{variant_id}/wholesale-discount", updateWholesaleDiscountHandler.Handle)
+
+	// 	// ❌ Remove Wholesale Discount from Variant
+	// 	r.Delete("/products/{product_id}/variants/{variant_id}/wholesale-discount", removeWholesaleDiscountHandler.Handle)
+
+	// 	// 🆕 Fetch full detail for a seller's product
+	// 	r.Get("/products/{product_id}", productFullDetailHandler.Handle)
+
+	// 	// Add inside r.Route("/api/seller") block:
+	// 	r.Get("/products", getAllProductsBySellerHandler.Handle)
+
+	// 	// 🆕 Update Product Category
+	// 	r.Put("/products/{product_id}/category", updateProductCategoryHandler.Handle)
+
 	// })
 
 	r.Route("/api/cart", func(r chi.Router) {
+
+		// ✅ allow token if present, but don't require it
+		r.Use(token.AttachAccessTokenForCustomer)
+
 		// ❌ Public endpoints
 		r.Post("/add", addToCartHandler.Handle)
 		r.Put("/update", updateCartQuantityHandler.Handle)
@@ -858,16 +849,11 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 		r.Get("/items", getAllCartItemsHandler.Handle)
 		r.Post("/summary", cartSummaryHandler.Handle)
 
-		// ✅ Auth-only endpoints
-		r.Group(func(r chi.Router) {
-			r.Use(token.AttachAccessToken)
-			r.Post("/checkout/initiate", checkoutHandler.Handle)
-			r.Post("/merge-guest", mergeGuestCartHandler.Handle)
-		})
+		r.Post("/checkout/initiate", checkoutHandler.Handle)
 	})
 
 	r.Route("/api/checkout", func(r chi.Router) {
-		r.Use(token.AttachAccessToken) // Requires access token
+		r.Use(token.AttachAccessTokenForCustomer) // Requires access token
 
 		// 🧾 Get Checkout Session Details
 		r.Get("/{checkout_session_id}", checkoutSessionHandler.Handle)
@@ -885,24 +871,24 @@ func NewRouter(db *sql.DB, redisClient *redis.Client) http.Handler {
 	})
 
 	r.Route("/api/products", func(r chi.Router) {
-		r.Use(token.AttachAccessToken)
 
-		r.Post("/{product_id}/reviews", addReviewHandler.Handle)
+		// 👉 Customer-only review endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(token.AttachAccessTokenForCustomer)
 
-		// ✏️ Edit Review
-		r.Put("/{product_id}/reviews/{review_id}", editReviewHandler.Handle)
+			r.Post("/{product_id}/reviews", addReviewHandler.Handle)
+			r.Put("/{product_id}/reviews/{review_id}", editReviewHandler.Handle)
+			r.Put("/{product_id}/reviews/{review_id}/archive", archiveReviewHandler.Handle)
+		})
 
-		// 🗑️ Archive a Review
-		r.Put("/{product_id}/reviews/{review_id}/archive", archiveReviewHandler.Handle)
+		// 👉 Seller-only review reply endpoints
+		r.Group(func(r chi.Router) {
+			r.Use(token.AttachAccessTokenForSeller)
 
-		// 🗨️ Reply to Review (Seller Only)
-		r.Post("/{product_id}/reviews/{review_id}/reply", replyHandler.Handle)
-
-		// ✏️ Edit Review Reply (Seller Only)
-		r.Put("/{product_id}/reviews/{review_id}/reply", editReplyHandler.Handle)
-
-		r.Put("/{product_id}/reviews/{review_id}/reply/archive", archiveReplyHandler.Handle)
-
+			r.Post("/{product_id}/reviews/{review_id}/reply", replyHandler.Handle)
+			r.Put("/{product_id}/reviews/{review_id}/reply", editReplyHandler.Handle)
+			r.Put("/{product_id}/reviews/{review_id}/reply/archive", archiveReplyHandler.Handle)
+		})
 	})
 
 	return r

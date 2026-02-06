@@ -30,21 +30,20 @@ func NewHandler(service *logoutsvc.LogoutService) *Handler {
 func (h *Handler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 🧩 Extract from context (middleware stores as string)
-	userIDStr := ctx.Value(token.CtxUserIDKey)
-	sessionIDStr := ctx.Value(token.CtxSessionIDKey)
-
-	if userIDStr == nil || sessionIDStr == nil {
-		response.Unauthorized(w, errors.NewAuthError("missing token claims in context"))
+	// Step 1️⃣: Extract user ID from access token context
+	rawUserID := ctx.Value(token.CtxUserIDKey)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
 		return
 	}
 
-	userID, err := uuid.Parse(userIDStr.(string))
+	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, errors.NewAuthError("invalid user_id in token"))
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 
+	sessionIDStr := ctx.Value(token.CtxSessionIDKey)
 	sessionID, err := uuid.Parse(sessionIDStr.(string))
 	if err != nil {
 		response.Unauthorized(w, errors.NewAuthError("invalid session_id in token"))

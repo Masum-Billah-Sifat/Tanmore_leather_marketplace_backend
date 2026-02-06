@@ -14,352 +14,41 @@ import (
 	"github.com/lib/pq"
 )
 
-const clearCartItemsByGuest = `-- name: ClearCartItemsByGuest :exec
-UPDATE cart_items
-SET
-    required_quantity = NULL,
-    is_active = false,
-    updated_at = $1
-WHERE
-    is_active = true
-    AND is_deprecated = false
-    AND guest_user_id = $2
-`
-
-type ClearCartItemsByGuestParams struct {
-	UpdatedAt   time.Time     `json:"updated_at"`
-	GuestUserID uuid.NullUUID `json:"guest_user_id"`
-}
-
-func (q *Queries) ClearCartItemsByGuest(ctx context.Context, arg ClearCartItemsByGuestParams) error {
-	_, err := q.db.ExecContext(ctx, clearCartItemsByGuest, arg.UpdatedAt, arg.GuestUserID)
-	return err
-}
-
 const clearCartItemsByUser = `-- name: ClearCartItemsByUser :exec
-
-
-
 UPDATE cart_items
-SET
-    required_quantity = NULL,
-    is_active = false,
-    updated_at = $1
-WHERE
-    is_active = true
-    AND is_deprecated = false
-    AND user_id = $2
+SET is_active = false,
+    updated_at = $2
+WHERE user_id = $1 AND is_active = true
 `
 
 type ClearCartItemsByUserParams struct {
-	UpdatedAt time.Time     `json:"updated_at"`
-	UserID    uuid.NullUUID `json:"user_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// -- name: ClearCartItemsForUser :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = $4,
-//	is_active = $3,
-//	updated_at = $2
-//
-// WHERE user_id = $1;
-// -- name: ClearCartItemsByOwner :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = NULL,
-//	is_active = false,
-//	updated_at = sqlc.arg(updated_at)
-//
-// WHERE
-//
-//	is_active = true
-//	AND is_deprecated = false
-//	AND (
-//	    (user_id = sqlc.narg(user_id) AND sqlc.narg(guest_user_id) IS NULL)
-//	    OR
-//	    (guest_user_id = sqlc.narg(guest_user_id) AND sqlc.narg(user_id) IS NULL)
-//	);
 func (q *Queries) ClearCartItemsByUser(ctx context.Context, arg ClearCartItemsByUserParams) error {
-	_, err := q.db.ExecContext(ctx, clearCartItemsByUser, arg.UpdatedAt, arg.UserID)
-	return err
-}
-
-const deactivateCartItemByGuestAndVariant = `-- name: DeactivateCartItemByGuestAndVariant :exec
-UPDATE cart_items
-SET
-    required_quantity = NULL,
-    is_active = false,
-    updated_at = $1
-WHERE
-    variant_id = $2
-    AND is_deprecated = false
-    AND guest_user_id = $3
-`
-
-type DeactivateCartItemByGuestAndVariantParams struct {
-	UpdatedAt   time.Time     `json:"updated_at"`
-	VariantID   uuid.UUID     `json:"variant_id"`
-	GuestUserID uuid.NullUUID `json:"guest_user_id"`
-}
-
-func (q *Queries) DeactivateCartItemByGuestAndVariant(ctx context.Context, arg DeactivateCartItemByGuestAndVariantParams) error {
-	_, err := q.db.ExecContext(ctx, deactivateCartItemByGuestAndVariant, arg.UpdatedAt, arg.VariantID, arg.GuestUserID)
+	_, err := q.db.ExecContext(ctx, clearCartItemsByUser, arg.UserID, arg.UpdatedAt)
 	return err
 }
 
 const deactivateCartItemByUserAndVariant = `-- name: DeactivateCartItemByUserAndVariant :exec
-
-
-
 UPDATE cart_items
-SET
-    required_quantity = NULL,
-    is_active = false,
-    updated_at = $1
-WHERE
-    variant_id = $2
-    AND is_deprecated = false
-    AND user_id = $3
+SET is_active = FALSE,
+    updated_at = $3
+WHERE user_id = $1
+  AND variant_id = $2
+  AND is_active = TRUE
 `
 
 type DeactivateCartItemByUserAndVariantParams struct {
-	UpdatedAt time.Time     `json:"updated_at"`
-	VariantID uuid.UUID     `json:"variant_id"`
-	UserID    uuid.NullUUID `json:"user_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	VariantID uuid.UUID `json:"variant_id"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// -- name: DeactivateCartItem :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = $5,
-//	is_active = $4,
-//	updated_at = $3
-//
-// WHERE user_id = $1 AND variant_id = $2;
-// -- name: DeactivateCartItemByOwnerAndVariant :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = NULL,
-//	is_active = false,
-//	updated_at = sqlc.arg(updated_at)
-//
-// WHERE
-//
-//	variant_id = sqlc.arg(variant_id)
-//	AND is_deprecated = false
-//	AND (
-//	    (user_id = sqlc.narg(user_id) AND sqlc.narg(guest_user_id) IS NULL)
-//	    OR
-//	    (guest_user_id = sqlc.narg(guest_user_id) AND sqlc.narg(user_id) IS NULL)
-//	);
 func (q *Queries) DeactivateCartItemByUserAndVariant(ctx context.Context, arg DeactivateCartItemByUserAndVariantParams) error {
-	_, err := q.db.ExecContext(ctx, deactivateCartItemByUserAndVariant, arg.UpdatedAt, arg.VariantID, arg.UserID)
+	_, err := q.db.ExecContext(ctx, deactivateCartItemByUserAndVariant, arg.UserID, arg.VariantID, arg.UpdatedAt)
 	return err
-}
-
-const deprecateGuestCartItems = `-- name: DeprecateGuestCartItems :exec
-UPDATE cart_items
-SET
-    is_deprecated = $3,
-    updated_at = $4
-WHERE guest_user_id = $1
-  AND is_active = $2
-  AND is_deprecated = false
-`
-
-type DeprecateGuestCartItemsParams struct {
-	GuestUserID  uuid.NullUUID `json:"guest_user_id"`
-	IsActive     bool          `json:"is_active"`
-	IsDeprecated bool          `json:"is_deprecated"`
-	UpdatedAt    time.Time     `json:"updated_at"`
-}
-
-func (q *Queries) DeprecateGuestCartItems(ctx context.Context, arg DeprecateGuestCartItemsParams) error {
-	_, err := q.db.ExecContext(ctx, deprecateGuestCartItems,
-		arg.GuestUserID,
-		arg.IsActive,
-		arg.IsDeprecated,
-		arg.UpdatedAt,
-	)
-	return err
-}
-
-const getActiveCartVariantSnapshotsByGuestAndVariantIDs = `-- name: GetActiveCartVariantSnapshotsByGuestAndVariantIDs :many
-SELECT
-  -- Cart fields
-  ci.id                AS cart_item_id,
-  ci.user_id           AS cart_user_id,
-  ci.variant_id        AS cart_variant_id,
-  ci.required_quantity AS cart_required_quantity,
-  ci.is_active         AS cart_is_active,
-  ci.created_at        AS cart_created_at,
-  ci.updated_at        AS cart_updated_at,
-
-  -- Snapshot fields
-  pvs.id                         AS snapshot_id,
-  pvs.categoryid,
-  pvs.iscategoryarchived,
-  pvs.categoryname,
-  pvs.sellerid,
-  pvs.issellerapproved,
-  pvs.issellerarchived,
-  pvs.issellerbanned,
-  pvs.sellerstorename,
-  pvs.productid,
-  pvs.isproductapproved,
-  pvs.isproductarchived,
-  pvs.isproductbanned,
-  pvs.producttitle,
-  pvs.productdescription,
-  pvs.productprimaryimageurl,
-  pvs.variantid,
-  pvs.isvariantarchived,
-  pvs.isvariantinstock,
-  pvs.stockamount,
-  pvs.color,
-  pvs.size,
-  pvs.retailprice,
-  pvs.hasretaildiscount,
-  pvs.retaildiscounttype,
-  pvs.retaildiscount,
-  pvs.haswholesaleenabled,
-  pvs.wholesaleprice,
-  pvs.wholesaleminquantity,
-  pvs.haswholesalediscount,
-  pvs.wholesalediscounttype,
-  pvs.wholesalediscount,
-  pvs.weight_grams,
-  pvs.createdat       AS snapshot_created_at,
-  pvs.updatedat       AS snapshot_updated_at
-
-FROM cart_items ci
-JOIN product_variant_snapshots pvs
-  ON ci.variant_id = pvs.variantid
-WHERE ci.is_active = true
-    AND ci.is_deprecated = false
-    AND ci.variant_id = ANY($1::UUID[])
-    AND ci.guest_user_id = $2
-`
-
-type GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams struct {
-	VariantIds  []uuid.UUID   `json:"variant_ids"`
-	GuestUserID uuid.NullUUID `json:"guest_user_id"`
-}
-
-type GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow struct {
-	CartItemID             uuid.UUID      `json:"cart_item_id"`
-	CartUserID             uuid.NullUUID  `json:"cart_user_id"`
-	CartVariantID          uuid.UUID      `json:"cart_variant_id"`
-	CartRequiredQuantity   sql.NullInt32  `json:"cart_required_quantity"`
-	CartIsActive           bool           `json:"cart_is_active"`
-	CartCreatedAt          time.Time      `json:"cart_created_at"`
-	CartUpdatedAt          time.Time      `json:"cart_updated_at"`
-	SnapshotID             uuid.UUID      `json:"snapshot_id"`
-	Categoryid             uuid.UUID      `json:"categoryid"`
-	Iscategoryarchived     bool           `json:"iscategoryarchived"`
-	Categoryname           string         `json:"categoryname"`
-	Sellerid               uuid.UUID      `json:"sellerid"`
-	Issellerapproved       bool           `json:"issellerapproved"`
-	Issellerarchived       bool           `json:"issellerarchived"`
-	Issellerbanned         bool           `json:"issellerbanned"`
-	Sellerstorename        string         `json:"sellerstorename"`
-	Productid              uuid.UUID      `json:"productid"`
-	Isproductapproved      bool           `json:"isproductapproved"`
-	Isproductarchived      bool           `json:"isproductarchived"`
-	Isproductbanned        bool           `json:"isproductbanned"`
-	Producttitle           string         `json:"producttitle"`
-	Productdescription     string         `json:"productdescription"`
-	Productprimaryimageurl string         `json:"productprimaryimageurl"`
-	Variantid              uuid.UUID      `json:"variantid"`
-	Isvariantarchived      bool           `json:"isvariantarchived"`
-	Isvariantinstock       bool           `json:"isvariantinstock"`
-	Stockamount            int32          `json:"stockamount"`
-	Color                  string         `json:"color"`
-	Size                   string         `json:"size"`
-	Retailprice            int64          `json:"retailprice"`
-	Hasretaildiscount      bool           `json:"hasretaildiscount"`
-	Retaildiscounttype     sql.NullString `json:"retaildiscounttype"`
-	Retaildiscount         sql.NullInt64  `json:"retaildiscount"`
-	Haswholesaleenabled    bool           `json:"haswholesaleenabled"`
-	Wholesaleprice         sql.NullInt64  `json:"wholesaleprice"`
-	Wholesaleminquantity   sql.NullInt32  `json:"wholesaleminquantity"`
-	Haswholesalediscount   bool           `json:"haswholesalediscount"`
-	Wholesalediscounttype  sql.NullString `json:"wholesalediscounttype"`
-	Wholesalediscount      sql.NullInt64  `json:"wholesalediscount"`
-	WeightGrams            int32          `json:"weight_grams"`
-	SnapshotCreatedAt      time.Time      `json:"snapshot_created_at"`
-	SnapshotUpdatedAt      time.Time      `json:"snapshot_updated_at"`
-}
-
-func (q *Queries) GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx context.Context, arg GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams) ([]GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getActiveCartVariantSnapshotsByGuestAndVariantIDs, pq.Array(arg.VariantIds), arg.GuestUserID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow
-	for rows.Next() {
-		var i GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow
-		if err := rows.Scan(
-			&i.CartItemID,
-			&i.CartUserID,
-			&i.CartVariantID,
-			&i.CartRequiredQuantity,
-			&i.CartIsActive,
-			&i.CartCreatedAt,
-			&i.CartUpdatedAt,
-			&i.SnapshotID,
-			&i.Categoryid,
-			&i.Iscategoryarchived,
-			&i.Categoryname,
-			&i.Sellerid,
-			&i.Issellerapproved,
-			&i.Issellerarchived,
-			&i.Issellerbanned,
-			&i.Sellerstorename,
-			&i.Productid,
-			&i.Isproductapproved,
-			&i.Isproductarchived,
-			&i.Isproductbanned,
-			&i.Producttitle,
-			&i.Productdescription,
-			&i.Productprimaryimageurl,
-			&i.Variantid,
-			&i.Isvariantarchived,
-			&i.Isvariantinstock,
-			&i.Stockamount,
-			&i.Color,
-			&i.Size,
-			&i.Retailprice,
-			&i.Hasretaildiscount,
-			&i.Retaildiscounttype,
-			&i.Retaildiscount,
-			&i.Haswholesaleenabled,
-			&i.Wholesaleprice,
-			&i.Wholesaleminquantity,
-			&i.Haswholesalediscount,
-			&i.Wholesalediscounttype,
-			&i.Wholesalediscount,
-			&i.WeightGrams,
-			&i.SnapshotCreatedAt,
-			&i.SnapshotUpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const getActiveCartVariantSnapshotsByUserAndVariantIDs = `-- name: GetActiveCartVariantSnapshotsByUserAndVariantIDs :many
@@ -413,20 +102,20 @@ SELECT
 FROM cart_items ci
 JOIN product_variant_snapshots pvs
   ON ci.variant_id = pvs.variantid
-WHERE   ci.is_active = true
-    AND ci.is_deprecated = false
-    AND ci.variant_id = ANY($1::UUID[])
-    AND ci.user_id = $2
+WHERE
+    ci.is_active = true
+    AND ci.user_id = $1
+    AND ci.variant_id = ANY($2::UUID[])
 `
 
 type GetActiveCartVariantSnapshotsByUserAndVariantIDsParams struct {
-	VariantIds []uuid.UUID   `json:"variant_ids"`
-	UserID     uuid.NullUUID `json:"user_id"`
+	UserID     uuid.UUID   `json:"user_id"`
+	VariantIds []uuid.UUID `json:"variant_ids"`
 }
 
 type GetActiveCartVariantSnapshotsByUserAndVariantIDsRow struct {
 	CartItemID             uuid.UUID      `json:"cart_item_id"`
-	CartUserID             uuid.NullUUID  `json:"cart_user_id"`
+	CartUserID             uuid.UUID      `json:"cart_user_id"`
 	CartVariantID          uuid.UUID      `json:"cart_variant_id"`
 	CartRequiredQuantity   sql.NullInt32  `json:"cart_required_quantity"`
 	CartIsActive           bool           `json:"cart_is_active"`
@@ -470,7 +159,7 @@ type GetActiveCartVariantSnapshotsByUserAndVariantIDsRow struct {
 }
 
 func (q *Queries) GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx context.Context, arg GetActiveCartVariantSnapshotsByUserAndVariantIDsParams) ([]GetActiveCartVariantSnapshotsByUserAndVariantIDsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getActiveCartVariantSnapshotsByUserAndVariantIDs, pq.Array(arg.VariantIds), arg.UserID)
+	rows, err := q.db.QueryContext(ctx, getActiveCartVariantSnapshotsByUserAndVariantIDs, arg.UserID, pq.Array(arg.VariantIds))
 	if err != nil {
 		return nil, err
 	}
@@ -535,329 +224,87 @@ func (q *Queries) GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx context.C
 	return items, nil
 }
 
-const getActiveGuestCartItems = `-- name: GetActiveGuestCartItems :many
-SELECT
-    id,
-    guest_user_id,
-    variant_id,
-    required_quantity,
-    created_at,
-    updated_at
-FROM cart_items
-WHERE guest_user_id = $1
-  AND is_active = TRUE
-  AND is_deprecated = FALSE
-`
-
-type GetActiveGuestCartItemsRow struct {
-	ID               uuid.UUID     `json:"id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
-	VariantID        uuid.UUID     `json:"variant_id"`
-	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
-	CreatedAt        time.Time     `json:"created_at"`
-	UpdatedAt        time.Time     `json:"updated_at"`
-}
-
-func (q *Queries) GetActiveGuestCartItems(ctx context.Context, guestUserID uuid.NullUUID) ([]GetActiveGuestCartItemsRow, error) {
-	rows, err := q.db.QueryContext(ctx, getActiveGuestCartItems, guestUserID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []GetActiveGuestCartItemsRow
-	for rows.Next() {
-		var i GetActiveGuestCartItemsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.GuestUserID,
-			&i.VariantID,
-			&i.RequiredQuantity,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const getCartItemByGuestAndVariant = `-- name: GetCartItemByGuestAndVariant :one
-SELECT
-    id,
-    user_id,
-    guest_user_id,
-    variant_id,
-    required_quantity,
-    is_active,
-    is_deprecated,
-    created_at,
-    updated_at
-FROM cart_items
-WHERE
-    variant_id = $1
-    AND is_deprecated = false
-    AND guest_user_id = $2
-`
-
-type GetCartItemByGuestAndVariantParams struct {
-	VariantID   uuid.UUID     `json:"variant_id"`
-	GuestUserID uuid.NullUUID `json:"guest_user_id"`
-}
-
-type GetCartItemByGuestAndVariantRow struct {
-	ID               uuid.UUID     `json:"id"`
-	UserID           uuid.NullUUID `json:"user_id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
-	VariantID        uuid.UUID     `json:"variant_id"`
-	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
-	IsActive         bool          `json:"is_active"`
-	IsDeprecated     bool          `json:"is_deprecated"`
-	CreatedAt        time.Time     `json:"created_at"`
-	UpdatedAt        time.Time     `json:"updated_at"`
-}
-
-func (q *Queries) GetCartItemByGuestAndVariant(ctx context.Context, arg GetCartItemByGuestAndVariantParams) (GetCartItemByGuestAndVariantRow, error) {
-	row := q.db.QueryRowContext(ctx, getCartItemByGuestAndVariant, arg.VariantID, arg.GuestUserID)
-	var i GetCartItemByGuestAndVariantRow
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.GuestUserID,
-		&i.VariantID,
-		&i.RequiredQuantity,
-		&i.IsActive,
-		&i.IsDeprecated,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
 const getCartItemByUserAndVariant = `-- name: GetCartItemByUserAndVariant :one
-
-
 SELECT
-    id,
-    user_id,
-    guest_user_id,
-    variant_id,
-    required_quantity,
-    is_active,
-    is_deprecated,
-    created_at,
-    updated_at
+  id,
+  user_id,
+  variant_id,
+  required_quantity,
+  is_active,
+  created_at,
+  updated_at
 FROM cart_items
 WHERE
-    variant_id = $1
-    AND is_deprecated = false
-    AND user_id = $2
+  user_id = $1
+  AND variant_id = $2
 `
 
 type GetCartItemByUserAndVariantParams struct {
-	VariantID uuid.UUID     `json:"variant_id"`
-	UserID    uuid.NullUUID `json:"user_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	VariantID uuid.UUID `json:"variant_id"`
 }
 
-type GetCartItemByUserAndVariantRow struct {
-	ID               uuid.UUID     `json:"id"`
-	UserID           uuid.NullUUID `json:"user_id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
-	VariantID        uuid.UUID     `json:"variant_id"`
-	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
-	IsActive         bool          `json:"is_active"`
-	IsDeprecated     bool          `json:"is_deprecated"`
-	CreatedAt        time.Time     `json:"created_at"`
-	UpdatedAt        time.Time     `json:"updated_at"`
-}
-
-// -- name: GetCartItemByOwnerAndVariant :one
-// SELECT
-//
-//	id,
-//	user_id,
-//	guest_user_id,
-//	variant_id,
-//	required_quantity,
-//	is_active,
-//	is_deprecated,
-//	created_at,
-//	updated_at
-//
-// FROM cart_items
-// WHERE
-//
-//	variant_id = sqlc.arg(variant_id)
-//	AND is_deprecated = false
-//	AND (
-//	    (user_id = sqlc.narg(user_id) AND sqlc.narg(guest_user_id) IS NULL)
-//	    OR
-//	    (guest_user_id = sqlc.narg(guest_user_id) AND sqlc.narg(user_id) IS NULL)
-//	);
-func (q *Queries) GetCartItemByUserAndVariant(ctx context.Context, arg GetCartItemByUserAndVariantParams) (GetCartItemByUserAndVariantRow, error) {
-	row := q.db.QueryRowContext(ctx, getCartItemByUserAndVariant, arg.VariantID, arg.UserID)
-	var i GetCartItemByUserAndVariantRow
+func (q *Queries) GetCartItemByUserAndVariant(ctx context.Context, arg GetCartItemByUserAndVariantParams) (CartItem, error) {
+	row := q.db.QueryRowContext(ctx, getCartItemByUserAndVariant, arg.UserID, arg.VariantID)
+	var i CartItem
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.GuestUserID,
 		&i.VariantID,
 		&i.RequiredQuantity,
 		&i.IsActive,
-		&i.IsDeprecated,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
 	return i, err
 }
 
-const insertCartItem = `-- name: InsertCartItem :one
+const insertCartItem = `-- name: InsertCartItem :exec
 INSERT INTO cart_items (
-    user_id,
-    guest_user_id,
-    variant_id,
-    required_quantity,
-    is_active,
-    is_deprecated,
-    created_at,
-    updated_at
+  id,
+  user_id,
+  variant_id,
+  required_quantity,
+  is_active,
+  created_at,
+  updated_at
+) VALUES (
+  $1, $2, $3, $4, $5, $6, $7
 )
-VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    true,
-    false,
-    $5,
-    $6
-)
-RETURNING
-    id,
-    user_id,
-    guest_user_id,
-    variant_id,
-    required_quantity,
-    is_active,
-    is_deprecated,
-    created_at,
-    updated_at
 `
 
 type InsertCartItemParams struct {
-	UserID           uuid.NullUUID `json:"user_id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
-	VariantID        uuid.UUID     `json:"variant_id"`
-	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
-	CreatedAt        time.Time     `json:"created_at"`
-	UpdatedAt        time.Time     `json:"updated_at"`
-}
-
-type InsertCartItemRow struct {
 	ID               uuid.UUID     `json:"id"`
-	UserID           uuid.NullUUID `json:"user_id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
+	UserID           uuid.UUID     `json:"user_id"`
 	VariantID        uuid.UUID     `json:"variant_id"`
 	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
 	IsActive         bool          `json:"is_active"`
-	IsDeprecated     bool          `json:"is_deprecated"`
 	CreatedAt        time.Time     `json:"created_at"`
 	UpdatedAt        time.Time     `json:"updated_at"`
 }
 
-func (q *Queries) InsertCartItem(ctx context.Context, arg InsertCartItemParams) (InsertCartItemRow, error) {
-	row := q.db.QueryRowContext(ctx, insertCartItem,
+func (q *Queries) InsertCartItem(ctx context.Context, arg InsertCartItemParams) error {
+	_, err := q.db.ExecContext(ctx, insertCartItem,
+		arg.ID,
 		arg.UserID,
-		arg.GuestUserID,
 		arg.VariantID,
 		arg.RequiredQuantity,
+		arg.IsActive,
 		arg.CreatedAt,
 		arg.UpdatedAt,
 	)
-	var i InsertCartItemRow
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.GuestUserID,
-		&i.VariantID,
-		&i.RequiredQuantity,
-		&i.IsActive,
-		&i.IsDeprecated,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const listActiveVariantIDsByGuest = `-- name: ListActiveVariantIDsByGuest :many
-SELECT variant_id
-FROM cart_items
-WHERE
-    is_active = true
-    AND is_deprecated = false
-    AND guest_user_id = $1
-`
-
-func (q *Queries) ListActiveVariantIDsByGuest(ctx context.Context, guestUserID uuid.NullUUID) ([]uuid.UUID, error) {
-	rows, err := q.db.QueryContext(ctx, listActiveVariantIDsByGuest, guestUserID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []uuid.UUID
-	for rows.Next() {
-		var variant_id uuid.UUID
-		if err := rows.Scan(&variant_id); err != nil {
-			return nil, err
-		}
-		items = append(items, variant_id)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return err
 }
 
 const listActiveVariantIDsByUser = `-- name: ListActiveVariantIDsByUser :many
-
-
-
 SELECT variant_id
 FROM cart_items
 WHERE
     is_active = true
-    AND is_deprecated = false
     AND user_id = $1
 `
 
-// -- name: ListActiveVariantIDsByUser :many
-// SELECT variant_id FROM cart_items
-// WHERE user_id = sqlc.arg(user_id)
-//
-//	AND is_active = TRUE;
-//
-// -- name: ListActiveVariantIDsByOwner :many
-// SELECT variant_id
-// FROM cart_items
-// WHERE
-//
-//	is_active = true
-//	AND is_deprecated = false
-//	AND (
-//	    (user_id = sqlc.narg(user_id) AND sqlc.narg(guest_user_id) IS NULL)
-//	    OR
-//	    (guest_user_id = sqlc.narg(guest_user_id) AND sqlc.narg(user_id) IS NULL)
-//	);
-func (q *Queries) ListActiveVariantIDsByUser(ctx context.Context, userID uuid.NullUUID) ([]uuid.UUID, error) {
+func (q *Queries) ListActiveVariantIDsByUser(ctx context.Context, userID uuid.UUID) ([]uuid.UUID, error) {
 	rows, err := q.db.QueryContext(ctx, listActiveVariantIDsByUser, userID)
 	if err != nil {
 		return nil, err
@@ -906,87 +353,56 @@ func (q *Queries) ReactivateCartItemByID(ctx context.Context, arg ReactivateCart
 	return err
 }
 
-const updateCartQuantityForGuest = `-- name: UpdateCartQuantityForGuest :exec
+const updateCartItemQuantityByID = `-- name: UpdateCartItemQuantityByID :exec
 UPDATE cart_items
 SET
     required_quantity = $1,
-    updated_at = $2
+    is_active = $2,
+    updated_at = $3
 WHERE
-    variant_id = $3
-    AND is_active = true
-    AND guest_user_id = $4
+    id = $4
 `
 
-type UpdateCartQuantityForGuestParams struct {
+type UpdateCartItemQuantityByIDParams struct {
 	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
+	IsActive         bool          `json:"is_active"`
 	UpdatedAt        time.Time     `json:"updated_at"`
-	VariantID        uuid.UUID     `json:"variant_id"`
-	GuestUserID      uuid.NullUUID `json:"guest_user_id"`
+	ID               uuid.UUID     `json:"id"`
 }
 
-func (q *Queries) UpdateCartQuantityForGuest(ctx context.Context, arg UpdateCartQuantityForGuestParams) error {
-	_, err := q.db.ExecContext(ctx, updateCartQuantityForGuest,
+func (q *Queries) UpdateCartItemQuantityByID(ctx context.Context, arg UpdateCartItemQuantityByIDParams) error {
+	_, err := q.db.ExecContext(ctx, updateCartItemQuantityByID,
 		arg.RequiredQuantity,
+		arg.IsActive,
 		arg.UpdatedAt,
-		arg.VariantID,
-		arg.GuestUserID,
+		arg.ID,
 	)
 	return err
 }
 
 const updateCartQuantityForUser = `-- name: UpdateCartQuantityForUser :exec
-
-
-
-
-
 UPDATE cart_items
 SET
-    required_quantity = $1,
-    updated_at = $2
+  required_quantity = $1,
+  updated_at = $2
 WHERE
-    variant_id = $3
-    AND is_active = true
-    AND user_id = $4
+  user_id = $3
+  AND variant_id = $4
 `
 
 type UpdateCartQuantityForUserParams struct {
 	RequiredQuantity sql.NullInt32 `json:"required_quantity"`
 	UpdatedAt        time.Time     `json:"updated_at"`
+	UserID           uuid.UUID     `json:"user_id"`
 	VariantID        uuid.UUID     `json:"variant_id"`
-	UserID           uuid.NullUUID `json:"user_id"`
 }
 
-// -- name: UpdateCartQuantity :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = $1,
-//	updated_at = $2
-//
-// WHERE user_id = $3 AND variant_id = $4 AND is_active = $5;
-// -- name: UpdateCartQuantity :exec
-// UPDATE cart_items
-// SET
-//
-//	required_quantity = sqlc.narg(required_quantity),
-//	updated_at = sqlc.arg(updated_at)
-//
-// WHERE
-//
-//	variant_id = sqlc.arg(variant_id)
-//	AND is_active = true
-//	AND (
-//	    (user_id = sqlc.narg(user_id) AND sqlc.narg(guest_user_id) IS NULL)
-//	    OR
-//	    (guest_user_id = sqlc.narg(guest_user_id) AND sqlc.narg(user_id) IS NULL)
-//	);
 func (q *Queries) UpdateCartQuantityForUser(ctx context.Context, arg UpdateCartQuantityForUserParams) error {
 	_, err := q.db.ExecContext(ctx, updateCartQuantityForUser,
 		arg.RequiredQuantity,
 		arg.UpdatedAt,
-		arg.VariantID,
 		arg.UserID,
+		arg.VariantID,
 	)
 	return err
 }

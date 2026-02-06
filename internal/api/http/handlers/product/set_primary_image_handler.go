@@ -34,11 +34,16 @@ func NewSetPrimaryImageHandler(service *service.SetPrimaryImageService) *SetPrim
 func (h *SetPrimaryImageHandler) Handle(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1️⃣ Get seller user ID from context
+	// Step 1️⃣: Extract user ID from access token context
 	rawUserID := ctx.Value(token.CtxUserIDKey)
+	if rawUserID == nil {
+		response.Unauthorized(w, errors.ErrAuthMissingToken())
+		return
+	}
+
 	userID, err := uuid.Parse(rawUserID.(string))
 	if err != nil {
-		response.Unauthorized(w, err)
+		response.Unauthorized(w, errors.ErrAuthInvalidUserID())
 		return
 	}
 

@@ -19,7 +19,6 @@ import (
 	repo "tanmore_backend/internal/repository/cart/add_to_cart"
 
 	"tanmore_backend/pkg/errors"
-	"tanmore_backend/pkg/sqlnull"
 	"tanmore_backend/pkg/timeutil"
 
 	"github.com/google/uuid"
@@ -27,18 +26,9 @@ import (
 
 // ------------------------------------------------------------
 // // 📥 Input from handler
-// type AddToCartInput struct {
-// 	UserID           uuid.UUID
-// 	ProductID        uuid.UUID
-// 	VariantID        uuid.UUID
-// 	RequiredQuantity int32
-// }
 
-// 📥 Input from handler
 type AddToCartInput struct {
-	UserID      *uuid.UUID
-	GuestUserID *uuid.UUID
-
+	UserID           uuid.UUID
 	ProductID        uuid.UUID
 	VariantID        uuid.UUID
 	RequiredQuantity int32
@@ -74,17 +64,17 @@ func (s *AddToCartService) Start(ctx context.Context, input AddToCartInput) (*Ad
 	err := s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
 
 		// Step 1️⃣: Validate user ONLY if authenticated
-		if input.UserID != nil {
-			user, err := q.GetUserByID(ctx, *input.UserID)
-			if err != nil {
-				return errors.NewNotFoundError("user")
-			}
-			if user.IsArchived {
-				return errors.NewAuthError("user is archived")
-			}
-			if user.IsBanned {
-				return errors.NewAuthError("user is banned")
-			}
+		// if input.UserID != nil {
+		user, err := q.GetUserByID(ctx, input.UserID)
+
+		if err != nil {
+			return errors.ErrAuthUserNotFound()
+		}
+		if user.IsArchived {
+			return errors.ErrAuthArchivedUser()
+		}
+		if user.IsBanned {
+			return errors.ErrAuthBannedUser()
 		}
 
 		// Step 2️⃣: Fetch variant snapshot (UNCHANGED)
@@ -110,23 +100,10 @@ func (s *AddToCartService) Start(ctx context.Context, input AddToCartInput) (*Ad
 			return errors.NewValidationError("required_quantity", "not enough stock available")
 		}
 
-		// Step 4️⃣: Check existing cart item (USER OR GUEST)
-		// Step 4️⃣: Check existing cart item (split for user vs guest)
-		var item sqlc.GetCartItemByUserAndVariantRow
-
-		if input.UserID != nil {
-			item, err = q.GetCartItemByUserAndVariant(ctx, sqlc.GetCartItemByUserAndVariantParams{
-				UserID:    sqlnull.UUIDPtr(input.UserID),
-				VariantID: input.VariantID,
-			})
-		} else {
-			guestItem, gErr := q.GetCartItemByGuestAndVariant(ctx, sqlc.GetCartItemByGuestAndVariantParams{
-				GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
-				VariantID:   input.VariantID,
-			})
-			item = sqlc.GetCartItemByUserAndVariantRow(guestItem) // type-compatible (same fields)
-			err = gErr
-		}
+		item, err := q.GetCartItemByUserAndVariant(ctx, sqlc.GetCartItemByUserAndVariantParams{
+			UserID:    input.UserID,
+			VariantID: input.VariantID,
+		})
 
 		if err == nil {
 			if item.IsActive {
@@ -135,12 +112,13 @@ func (s *AddToCartService) Start(ctx context.Context, input AddToCartInput) (*Ad
 
 			// Reactivate
 			err := q.ReactivateCartItemByID(ctx, sqlc.ReactivateCartItemByIDParams{
-				ID: item.ID,
 				RequiredQuantity: sql.NullInt32{
 					Int32: input.RequiredQuantity,
 					Valid: true,
 				},
+				IsActive:  true,
 				UpdatedAt: now,
+				ID:        item.ID,
 			})
 			if err != nil {
 				return errors.NewTableError("cart_items.reactivate", err.Error())
@@ -153,24 +131,18 @@ func (s *AddToCartService) Start(ctx context.Context, input AddToCartInput) (*Ad
 			return nil
 		}
 
-		fmt.Println("DEBUG – UserID:", input.UserID)
-		fmt.Println("DEBUG – GuestUserID:", input.GuestUserID)
-
-		// Step 5️⃣: Insert new cart item
-		_, err = q.InsertCartItem(ctx, sqlc.InsertCartItemParams{
-			UserID:      sqlnull.UUIDPtr(input.UserID),
-			GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
-			VariantID:   input.VariantID,
+		err = q.InsertCartItem(ctx, sqlc.InsertCartItemParams{
+			ID:        uuid.New(),
+			UserID:    input.UserID,
+			VariantID: input.VariantID,
 			RequiredQuantity: sql.NullInt32{
 				Int32: input.RequiredQuantity,
 				Valid: true,
 			},
+			IsActive:  true,
 			CreatedAt: now,
 			UpdatedAt: now,
 		})
-		// if err != nil {
-		// 	return errors.NewTableError("cart_items.insert", err.Error())
-		// }
 
 		if err != nil {
 			fmt.Println("❌ SQL Insert Error:", err)

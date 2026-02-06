@@ -74,27 +74,35 @@ func (s *CheckoutService) FromProduct(
 
 	// 🔐 User moderation
 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-	if err != nil || user.IsBanned || user.IsArchived {
-		return nil, errors.NewAuthError("unauthorized user")
-	}
-
-	// 📸 Snapshot rows
-	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(
-		ctx,
-		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-			UserID:     sqlnull.UUID(input.UserID),
-			VariantIds: variantIDs,
-		},
-	)
 	if err != nil {
-		return nil, errors.NewServerError("failed to fetch snapshot data")
+		return nil, errors.ErrAuthUserNotFound()
+	}
+	if user.IsArchived {
+		return nil, errors.ErrAuthArchivedUser()
+	}
+	if user.IsBanned {
+		return nil, errors.ErrAuthBannedUser()
 	}
 
-	for i := range rows {
-		rows[i].CartRequiredQuantity = sqlnull.Int32(int64(input.Quantity))
+	// ✅ Buy-now must not depend on cart rows
+	snapshots, err := s.Deps.Repo.GetVariantSnapshotsByVariantIDs(ctx, variantIDs)
+	if err != nil {
+		return nil, errors.NewServerError("failed to fetch variant snapshot data")
 	}
 
-	subtotal, totalWeight, items, invalid := processVariants(input.UserID, variantIDs, rows)
+	// quantity map for buy-now
+	qtyByVariant := map[uuid.UUID]int32{
+		input.VariantID: input.Quantity,
+	}
+
+	subtotal, totalWeight, items, invalid := processSnapshotsForCheckout(
+		input.UserID,
+		variantIDs,
+		snapshots,
+		qtyByVariant,
+		true, // enforce stock cap strictly for buy-now
+	)
+
 	if len(items) == 0 {
 		reason := "variant unavailable"
 		if len(invalid) > 0 {
@@ -110,7 +118,6 @@ func (s *CheckoutService) FromProduct(
 	now := timeutil.NowUTC()
 
 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-		// 🧾 Insert checkout session
 		_, err := q.InsertCheckoutSession(ctx, sqlc.InsertCheckoutSessionParams{
 			ID:                            checkoutSessionID,
 			UserID:                        input.UserID,
@@ -131,7 +138,6 @@ func (s *CheckoutService) FromProduct(
 			return err
 		}
 
-		// 🧾 Insert items
 		for i := range items {
 			items[i].CheckoutSessionID = checkoutSessionID
 			if err := q.InsertCheckoutItem(ctx, items[i]); err != nil {
@@ -167,7 +173,7 @@ func (s *CheckoutService) FromCart(
 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(
 		ctx,
 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-			UserID:     sqlnull.UUID(input.UserID),
+			UserID:     input.UserID,
 			VariantIds: input.VariantIDs,
 		},
 	)
@@ -233,6 +239,113 @@ func (s *CheckoutService) FromCart(
 // ============================================================
 // VARIANT VALIDATION + ITEM BUILD
 // ============================================================
+
+func processSnapshotsForCheckout(
+	userID uuid.UUID,
+	requestedVariantIDs []uuid.UUID,
+	snapshots []sqlc.ProductVariantSnapshot,
+	qtyByVariant map[uuid.UUID]int32,
+	enforceStock bool,
+) (subtotal int64, totalWeight int64, items []sqlc.InsertCheckoutItemParams, invalid []map[string]string) {
+
+	found := map[uuid.UUID]bool{}
+	now := timeutil.NowUTC()
+
+	for _, s := range snapshots {
+		vid := s.Variantid
+		found[vid] = true
+
+		qty := qtyByVariant[vid]
+		if qty <= 0 {
+			invalid = append(invalid, map[string]string{
+				"variant_id": vid.String(),
+				"reason":     "invalid quantity",
+			})
+			continue
+		}
+
+		// Moderation / availability checks
+		if s.Issellerbanned || s.Issellerarchived || !s.Issellerapproved ||
+			s.Isproductbanned || s.Isproductarchived || !s.Isproductapproved ||
+			s.Iscategoryarchived ||
+			s.Isvariantarchived || !s.Isvariantinstock {
+
+			invalid = append(invalid, map[string]string{
+				"variant_id": vid.String(),
+				"reason":     "variant unavailable or moderated",
+			})
+			continue
+		}
+
+		// Stock cap (if you want strict behavior)
+		if enforceStock && int64(qty) > int64(s.Stockamount) {
+			invalid = append(invalid, map[string]string{
+				"variant_id": vid.String(),
+				"reason":     "insufficient stock",
+			})
+			continue
+		}
+
+		// Unit price (retail)
+		unitPrice := s.Retailprice
+
+		// Discount metadata (store in checkout item; not altering price unless your rules are finalized)
+		hasDiscount := false
+		discountType := ""
+		discountValue := ""
+
+		// IMPORTANT: Hasretaildiscount is a boolean, but type/value fields may still be NULL.
+		// Only set discount fields if they are valid.
+		if s.Hasretaildiscount && s.Retaildiscounttype.Valid && s.Retaildiscount.Valid {
+			hasDiscount = true
+			discountType = s.Retaildiscounttype.String
+			discountValue = fmt.Sprintf("%d", s.Retaildiscount.Int64) // keep consistent, cents or percent-int, your call
+		}
+
+		line := unitPrice * int64(qty)
+		subtotal += line
+		totalWeight += int64(qty) * int64(s.WeightGrams)
+
+		items = append(items, sqlc.InsertCheckoutItemParams{
+			ID:                     uuidutil.New(),
+			CheckoutSessionID:      uuid.UUID{},
+			UserID:                 userID,
+			SellerID:               s.Sellerid,
+			SellerStoreName:        s.Sellerstorename,
+			CategoryID:             s.Categoryid,
+			CategoryName:           s.Categoryname,
+			ProductID:              s.Productid,
+			ProductTitle:           s.Producttitle,
+			ProductDescription:     s.Productdescription,
+			ProductPrimaryImageUrl: s.Productprimaryimageurl,
+			VariantID:              vid,
+			Color:                  s.Color,
+			Size:                   s.Size,
+			BuyingMode:             "retail",
+			UnitPrice:              toDecimal(unitPrice),
+
+			HasDiscount:   hasDiscount,
+			DiscountType:  sqlnull.String(discountType),
+			DiscountValue: sqlnull.String(discountValue),
+
+			RequiredQuantity: qty,
+			WeightGrams:      int32(s.WeightGrams),
+			CreatedAt:        now,
+		})
+	}
+
+	// Missing snapshot rows => variant not found (or snapshot missing)
+	for _, id := range requestedVariantIDs {
+		if !found[id] {
+			invalid = append(invalid, map[string]string{
+				"variant_id": id.String(),
+				"reason":     "variant not found",
+			})
+		}
+	}
+
+	return
+}
 
 func processVariants(
 	userID uuid.UUID,
@@ -369,55 +482,6 @@ func (s *CheckoutService) selectPlatformPromotion(
 	return *chosen, amount
 }
 
-// func (s *CheckoutService) selectPlatformPromotion(ctx context.Context, subtotal int64) (sqlc.PlatformPromotion, int64) {
-// 	promos, err := s.Deps.Repo.GetActivePlatformPromotions(ctx)
-// 	if err != nil || len(promos) == 0 {
-// 		return sqlc.PlatformPromotion{}, 0
-// 	}
-
-// 	now := timeutil.NowUTC()
-// 	var chosen *sqlc.PlatformPromotion
-
-// 	for i := range promos {
-// 		p := &promos[i]
-// 		if now.Before(p.StartTime) || now.After(p.EndTime) {
-// 			continue
-// 		}
-
-// 		if p.MinCartValue.Valid && subtotal < toCents(p.MinCartValue.String) {
-// 			continue
-// 		}
-// 		if p.MaxCartValue.Valid && subtotal > toCents(p.MaxCartValue.String) {
-// 			continue
-// 		}
-
-// 		if chosen == nil || p.Priority < chosen.Priority {
-// 			chosen = p
-// 		}
-// 	}
-
-// 	if chosen == nil {
-// 		return sqlc.PlatformPromotion{}, 0
-// 	}
-
-// 	amount := int64(0)
-// 	switch chosen.DiscountType {
-// 	case "flat":
-// 		amount = toCents(chosen.DiscountValue)
-// 	case "percentage":
-// 		amount = (subtotal * toCents(chosen.DiscountValue)) / 10000
-// 	}
-
-// 	if chosen.MaxDiscountCap.Valid {
-// 		cap := toCents(chosen.MaxDiscountCap.String)
-// 		if amount > cap {
-// 			amount = cap
-// 		}
-// 	}
-
-// 	return *chosen, amount
-// }
-
 // ============================================================
 // HELPERS
 // ============================================================
@@ -439,1102 +503,272 @@ func maxInt64(a, b int64) int64 {
 	return b
 }
 
-// // ------------------------------------------------------------
-// // 📁 File: internal/services/checkout/checkout_service.go
-// // 🧠 Finalized version of POST /api/checkout/initiate
-// //     - Handles platform promotion selection
-// //     - Inserts enriched checkout session & items
-// //     - Returns only checkout_session_id and message
-
-// package checkout
-
-// import (
-// 	"context"
-// 	"database/sql"
-// 	"fmt"
-
-// 	"github.com/google/uuid"
-
-// 	"tanmore_backend/internal/db/sqlc"
-// 	repo "tanmore_backend/internal/repository/checkout"
-// 	"tanmore_backend/pkg/errors"
-// 	"tanmore_backend/pkg/sqlnull"
-// 	"tanmore_backend/pkg/timeutil"
-// 	uuidutil "tanmore_backend/pkg/uuid"
-// )
-
-// type CheckoutFromProductInput struct {
-// 	UserID    uuid.UUID
-// 	VariantID uuid.UUID
-// 	Quantity  int32
-// }
-
-// type CheckoutFromCartInput struct {
-// 	UserID     uuid.UUID
-// 	VariantIDs []uuid.UUID
-// }
-
-// type CheckoutMinimalResult struct {
-// 	CheckoutSessionID uuid.UUID `json:"checkout_session_id"`
-// 	Message           string    `json:"message"`
-// }
-
-// type CheckoutServiceDeps struct {
-// 	Repo repo.CheckoutRepoInterface
-// }
-
-// type CheckoutService struct {
-// 	Deps CheckoutServiceDeps
-// }
-
-// func NewCheckoutService(deps CheckoutServiceDeps) *CheckoutService {
-// 	return &CheckoutService{Deps: deps}
-// }
-
-// func (s *CheckoutService) FromProduct(
-// 	ctx context.Context,
-// 	input CheckoutFromProductInput,
-// ) (*CheckoutMinimalResult, error) {
-// 	variantIDs := []uuid.UUID{input.VariantID}
-
-// 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-// 	if err != nil || user.IsBanned || user.IsArchived {
-// 		return nil, errors.NewAuthError("unauthorized user")
-// 	}
-
-// 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-// 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-// 			UserID:     sqlnull.UUID(input.UserID),
-// 			VariantIds: variantIDs,
-// 		})
-// 	if err != nil {
-// 		return nil, errors.NewServerError("failed to fetch snapshot data")
-// 	}
-
-// 	for i := range rows {
-// 		rows[i].CartRequiredQuantity = sqlnull.Int32(int64(input.Quantity))
-// 	}
-
-// 	subtotal, totalWeight, validItems, invalidItems := s.simplifiedProcessVariants(input.UserID, variantIDs, rows)
-
-// 	if len(validItems) == 0 {
-// 		reason := "variant unavailable"
-// 		if len(invalidItems) > 0 {
-// 			if msg, ok := invalidItems[0]["reason"]; ok {
-// 				reason = msg
-// 			}
-// 		}
-// 		return nil, errors.NewValidationError("variant_id", reason)
-// 	}
-
-// 	// 🔍 Attempt platform promo
-// 	promo, promoAppliedAmount := s.Deps.Repo.FindApplicablePlatformPromo(ctx, subtotal)
-
-// 	checkoutSessionID := uuidutil.New()
-// 	now := timeutil.NowUTC()
-// 	totalPayable := subtotal - promoAppliedAmount
-// 	if totalPayable < 0 {
-// 		totalPayable = 0
-// 	}
-
-// 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-// 		sessionParams := sqlc.InsertCheckoutSessionParams{
-// 			ID:                            checkoutSessionID,
-// 			UserID:                        input.UserID,
-// 			Subtotal:                      toDecimal(subtotal),
-// 			TotalWeightGrams:              int32(totalWeight),
-// 			DeliveryCharge:                sql.NullString{Valid: false},
-// 			TotalPayable:                  toDecimal(totalPayable),
-// 			ShippingAddressID:             uuid.NullUUID{},
-// 			Status:                        "awaiting_shipping_info",
-// 			PlatformDiscountType:          sqlnull.StringPtr(promo.DiscountType),
-// 			PlatformDiscountValue:         sqlnull.StringPtr(promo.DiscountValue),
-// 			PlatformDiscountAmountApplied: sqlnull.String(promoAppliedAmount),
-// 			IsPlatformDiscountApplied:     promo.ID != uuid.Nil,
-// 			PaymentMethod:                 "cod",
-// 			CreatedAt:                     now,
-// 		}
-
-// 		if _, err := q.InsertCheckoutSession(ctx, sessionParams); err != nil {
-// 			return err
-// 		}
-// 		for i := range validItems {
-// 			validItems[i].CheckoutSessionID = checkoutSessionID
-// 			if _, err := q.InsertCheckoutItem(ctx, validItems[i]); err != nil {
-// 				return err
-// 			}
-// 		}
-// 		return nil
-// 	})
-// 	if err != nil {
-// 		return nil, errors.NewServerError("could not create checkout session")
-// 	}
-
-// 	return &CheckoutMinimalResult{
-// 		CheckoutSessionID: checkoutSessionID,
-// 		Message:           "checkout session created successfully",
-// 	}, nil
-// }
-
-// // ⚠️ FromCart() will be updated the same way (logic identical)
-// // We can refactor to reuse if needed
-
-// // 🧠 The `FindApplicablePlatformPromo` logic will:
-// // - Return most prioritized active promo within time range
-// // - Apply only if subtotal fits promo min/max rules
-// // - Return promo struct and applied discount value
-// //
-// // 🔍 Example query:
-// // -- name: FindActivePlatformPromotions :many
-// // SELECT * FROM platform_promotions
-// // WHERE is_active = TRUE AND is_archived = FALSE
-// // ORDER BY priority ASC, created_at DESC;
-// //
-// // ✅ Applied inside Go logic:
-// // - Check current time within (start_time, end_time)
-// // - Check subtotal against min_cart and max_cart
-// // - Calculate promoAppliedAmount = min(discount_value, max_discount_cap)
-// // - Return the promo + applied value
-
-// func (s *CheckoutService) simplifiedProcessVariants(
-// 	userID uuid.UUID,
-// 	requestedVariantIDs []uuid.UUID,
-// 	rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow,
-// ) (int64, int64, []sqlc.InsertCheckoutItemParams, []map[string]string) {
-// 	var (
-// 		subtotal     int64
-// 		totalWeight  int64
-// 		validItems   []sqlc.InsertCheckoutItemParams
-// 		invalidItems []map[string]string
-// 		now          = timeutil.NowUTC()
-// 		foundMap     = make(map[uuid.UUID]bool)
-// 	)
-
-// 	for _, row := range rows {
-// 		foundMap[row.CartVariantID] = true
-// 		quantity := int32(0)
-// 		if row.CartRequiredQuantity.Valid {
-// 			quantity = row.CartRequiredQuantity.Int32
-// 		}
-
-// 		if !row.Issellerapproved || row.Issellerarchived || row.Issellerbanned ||
-// 			!row.Isproductapproved || row.Isproductarchived || row.Isproductbanned ||
-// 			row.Isvariantarchived || !row.Isvariantinstock || quantity == 0 {
-// 			invalidItems = append(invalidItems, map[string]string{
-// 				"variant_id": row.CartVariantID.String(),
-// 				"reason":     "variant unavailable or moderated",
-// 			})
-// 			continue
-// 		}
-
-// 		price := row.Retailprice
-// 		total := price * int64(quantity)
-// 		subtotal += total
-// 		totalWeight += int64(quantity) * int64(row.WeightGrams)
-
-// 		validItems = append(validItems, sqlc.InsertCheckoutItemParams{
-// 			ID:                     uuidutil.New(),
-// 			CheckoutSessionID:      uuid.UUID{},
-// 			UserID:                 userID,
-// 			SellerID:               row.Sellerid,
-// 			SellerStoreName:        row.Sellerstorename,
-// 			CategoryID:             row.Categoryid,
-// 			CategoryName:           row.Categoryname,
-// 			ProductID:              row.Productid,
-// 			ProductTitle:           row.Producttitle,
-// 			ProductDescription:     row.Productdescription,
-// 			ProductPrimaryImageUrl: row.Productprimaryimageurl,
-// 			VariantID:              row.CartVariantID,
-// 			Color:                  row.Color,
-// 			Size:                   row.Size,
-// 			BuyingMode:             "retail",
-// 			UnitPrice:              toDecimal(price).String(),
-// 			HasDiscount:            false,
-// 			DiscountType:           "",
-// 			DiscountValue:          "0.00",
-// 			RequiredQuantity:       quantity,
-// 			WeightGrams:            int32(row.WeightGrams),
-// 			CreatedAt:              now,
-// 		})
-// 	}
-
-// 	for _, id := range requestedVariantIDs {
-// 		if !foundMap[id] {
-// 			invalidItems = append(invalidItems, map[string]string{
-// 				"variant_id": id.String(),
-// 				"reason":     "variant not found",
-// 			})
-// 		}
-// 	}
-
-// 	return subtotal, totalWeight, validItems, invalidItems
-// }
-
-// func toDecimal(val int64) string {
-// 	return fmt.Sprintf("%.2f", float64(val)/100)
-// }
-
-// // // ------------------------------------------------------------
-// // // 📁 File: internal/services/checkout/checkout_service.go
-// // // 🧠 Refactored version of POST /api/checkout/initiate
-// // //     - Still validates user moderation
-// // //     - Still fetches variant snapshot data
-// // //     - Still inserts checkout session + items
-// // //     - ✅ But now returns ONLY checkout_session_id + message
-
-// // package checkout
-
-// // import (
-// // 	"context"
-// // 	"database/sql"
-// // 	"fmt"
-
-// // 	"github.com/google/uuid"
-
-// // 	"tanmore_backend/internal/db/sqlc"
-// // 	repo "tanmore_backend/internal/repository/checkout"
-// // 	"tanmore_backend/pkg/errors"
-// // 	"tanmore_backend/pkg/sqlnull"
-// // 	"tanmore_backend/pkg/timeutil"
-// // 	uuidutil "tanmore_backend/pkg/uuid"
-// // )
-
-// // type CheckoutFromProductInput struct {
-// // 	UserID    uuid.UUID
-// // 	VariantID uuid.UUID
-// // 	Quantity  int32
-// // }
-
-// // type CheckoutFromCartInput struct {
-// // 	UserID     uuid.UUID
-// // 	VariantIDs []uuid.UUID
-// // }
-
-// // type CheckoutMinimalResult struct {
-// // 	CheckoutSessionID uuid.UUID `json:"checkout_session_id"`
-// // 	Message           string    `json:"message"`
-// // }
-
-// // type CheckoutServiceDeps struct {
-// // 	Repo repo.CheckoutRepoInterface
-// // }
-
-// // type CheckoutService struct {
-// // 	Deps CheckoutServiceDeps
-// // }
-
-// // func NewCheckoutService(deps CheckoutServiceDeps) *CheckoutService {
-// // 	return &CheckoutService{Deps: deps}
-// // }
-
-// // func (s *CheckoutService) FromProduct(
-// // 	ctx context.Context,
-// // 	input CheckoutFromProductInput,
-// // ) (*CheckoutMinimalResult, error) {
-// // 	variantIDs := []uuid.UUID{input.VariantID}
-
-// // 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-// // 	if err != nil || user.IsBanned || user.IsArchived {
-// // 		return nil, errors.NewAuthError("unauthorized user")
-// // 	}
-
-// // 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-// // 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-// // 			UserID:     sqlnull.UUID(input.UserID),
-// // 			VariantIds: variantIDs,
-// // 		})
-// // 	if err != nil {
-// // 		return nil, errors.NewServerError("failed to fetch snapshot data")
-// // 	}
-
-// // 	for i := range rows {
-// // 		rows[i].CartRequiredQuantity = sqlnull.Int32(int64(input.Quantity))
-// // 	}
-
-// // 	subtotal, _, validItems, invalidItems := s.simplifiedProcessVariants(input.UserID, variantIDs, rows)
-
-// // 	if len(validItems) == 0 {
-// // 		reason := "variant unavailable"
-// // 		if len(invalidItems) > 0 {
-// // 			if msg, ok := invalidItems[0]["reason"]; ok {
-// // 				reason = msg
-// // 			}
-// // 		}
-// // 		return nil, errors.NewValidationError("variant_id", reason)
-// // 	}
-
-// // 	checkoutSessionID := uuidutil.New()
-// // 	now := timeutil.NowUTC()
-
-// // 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-// // 		sessionParams := sqlc.InsertCheckoutSessionParams{
-// // 			ID:                checkoutSessionID,
-// // 			UserID:            input.UserID,
-// // 			Subtotal:          toDecimal(subtotal).String(),
-// // 			TotalPayable:      toDecimal(subtotal).String(),
-// // 			DeliveryCharge:    sql.NullString{Valid: false},
-// // 			ShippingAddressID: uuid.NullUUID{},
-// // 			CreatedAt:         now,
-// // 		}
-// // 		if _, err := q.InsertCheckoutSession(ctx, sessionParams); err != nil {
-// // 			return err
-// // 		}
-// // 		for i := range validItems {
-// // 			validItems[i].CheckoutSessionID = checkoutSessionID
-// // 			if _, err := q.InsertCheckoutItem(ctx, validItems[i]); err != nil {
-// // 				return err
-// // 			}
-// // 		}
-// // 		return nil
-// // 	})
-// // 	if err != nil {
-// // 		return nil, errors.NewServerError("could not create checkout session")
-// // 	}
-
-// // 	return &CheckoutMinimalResult{
-// // 		CheckoutSessionID: checkoutSessionID,
-// // 		Message:           "checkout session created successfully",
-// // 	}, nil
-// // }
-
-// // func (s *CheckoutService) FromCart(
-// // 	ctx context.Context,
-// // 	input CheckoutFromCartInput,
-// // ) (*CheckoutMinimalResult, error) {
-// // 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-// // 	if err != nil || user.IsBanned || user.IsArchived {
-// // 		return nil, errors.NewAuthError("unauthorized user")
-// // 	}
-
-// // 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-// // 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-// // 			UserID:     sqlnull.UUID(input.UserID),
-// // 			VariantIds: input.VariantIDs,
-// // 		})
-// // 	if err != nil {
-// // 		return nil, errors.NewServerError("failed to fetch snapshot data")
-// // 	}
-
-// // 	subtotal, _, validItems, invalidItems := s.simplifiedProcessVariants(input.UserID, input.VariantIDs, rows)
-
-// // 	if len(validItems) == 0 {
-// // 		return nil, errors.NewValidationError("variant_ids", "no valid variants to checkout")
-// // 	}
-
-// // 	checkoutSessionID := uuidutil.New()
-// // 	now := timeutil.NowUTC()
-
-// // 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-// // 		sessionParams := sqlc.InsertCheckoutSessionParams{
-// // 			ID:                checkoutSessionID,
-// // 			UserID:            input.UserID,
-// // 			Subtotal:          toDecimal(subtotal).String(),
-// // 			TotalPayable:      toDecimal(subtotal).String(),
-// // 			DeliveryCharge:    sql.NullString{Valid: false},
-// // 			ShippingAddressID: uuid.NullUUID{},
-// // 			CreatedAt:         now,
-// // 		}
-// // 		if _, err := q.InsertCheckoutSession(ctx, sessionParams); err != nil {
-// // 			return err
-// // 		}
-// // 		for i := range validItems {
-// // 			validItems[i].CheckoutSessionID = checkoutSessionID
-// // 			if _, err := q.InsertCheckoutItem(ctx, validItems[i]); err != nil {
-// // 				return err
-// // 			}
-// // 		}
-// // 		return nil
-// // 	})
-// // 	if err != nil {
-// // 		return nil, errors.NewServerError("could not create checkout session")
-// // 	}
-
-// // 	return &CheckoutMinimalResult{
-// // 		CheckoutSessionID: checkoutSessionID,
-// // 		Message:           "checkout session created successfully",
-// // 	}, nil
-// // }
-
-// // func (s *CheckoutService) simplifiedProcessVariants(
-// // 	userID uuid.UUID,
-// // 	requestedVariantIDs []uuid.UUID,
-// // 	rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow,
-// // ) (int64, int64, []sqlc.InsertCheckoutItemParams, []map[string]string) {
-// // 	var (
-// // 		subtotal     int64
-// // 		totalWeight  int64
-// // 		validItems   []sqlc.InsertCheckoutItemParams
-// // 		invalidItems []map[string]string
-// // 		now          = timeutil.NowUTC()
-// // 		foundMap     = make(map[uuid.UUID]bool)
-// // 	)
-
-// // 	for _, row := range rows {
-// // 		foundMap[row.CartVariantID] = true
-// // 		quantity := int32(0)
-// // 		if row.CartRequiredQuantity.Valid {
-// // 			quantity = row.CartRequiredQuantity.Int32
-// // 		}
-
-// // 		if !row.Issellerapproved || row.Issellerarchived || row.Issellerbanned ||
-// // 			!row.Isproductapproved || row.Isproductarchived || row.Isproductbanned ||
-// // 			row.Isvariantarchived || !row.Isvariantinstock || quantity == 0 {
-// // 			invalidItems = append(invalidItems, map[string]string{
-// // 				"variant_id": row.CartVariantID.String(),
-// // 				"reason":     "variant unavailable or moderated",
-// // 			})
-// // 			continue
-// // 		}
-
-// // 		price := row.Retailprice
-// // 		total := price * int64(quantity)
-// // 		subtotal += total
-// // 		totalWeight += int64(quantity) * int64(row.WeightGrams)
-
-// // 		validItems = append(validItems, sqlc.InsertCheckoutItemParams{
-// // 			ID:                     uuidutil.New(),
-// // 			CheckoutSessionID:      uuid.UUID{},
-// // 			UserID:                 userID,
-// // 			SellerID:               row.Sellerid,
-// // 			SellerStoreName:        row.Sellerstorename,
-// // 			CategoryID:             row.Categoryid,
-// // 			CategoryName:           row.Categoryname,
-// // 			ProductID:              row.Productid,
-// // 			ProductTitle:           row.Producttitle,
-// // 			ProductDescription:     row.Productdescription,
-// // 			ProductPrimaryImageUrl: row.Productprimaryimageurl,
-// // 			VariantID:              row.CartVariantID,
-// // 			Color:                  row.Color,
-// // 			Size:                   row.Size,
-// // 			BuyingMode:             "retail",
-// // 			UnitPrice:              toDecimal(price).String(),
-// // 			HasDiscount:            false,
-// // 			DiscountType:           "",
-// // 			DiscountValue:          "0.00",
-// // 			RequiredQuantity:       quantity,
-// // 			WeightGrams:            int32(row.WeightGrams),
-// // 			CreatedAt:              now,
-// // 		})
-// // 	}
-
-// // 	for _, id := range requestedVariantIDs {
-// // 		if !foundMap[id] {
-// // 			invalidItems = append(invalidItems, map[string]string{
-// // 				"variant_id": id.String(),
-// // 				"reason":     "variant not found",
-// // 			})
-// // 		}
-// // 	}
-
-// // 	return subtotal, totalWeight, validItems, invalidItems
-// // }
-
-// // func toDecimal(val int64) sql.NullString {
-// // 	return sql.NullString{Valid: true, String: fmt.Sprintf("%.2f", float64(val)/100)}
-// // }
-
-// // // // ------------------------------------------------------------
-// // // // 📁 File: internal/services/checkout/checkout_service.go
-// // // // 🧠 Handles POST /api/checkout/initiate
-// // // //     - Validates user moderation
-// // // //     - Fetches snapshot-enriched variant rows
-// // // //     - Applies retail vs wholesale pricing logic
-// // // //     - Creates checkout session and item rows
-// // // //     - Returns valid + invalid items + checkout_session_id
-
-// // // package checkout
-
-// // // import (
-// // // 	"context"
-// // // 	"database/sql"
-// // // 	"fmt"
-// // // 	"time"
-
-// // // 	"github.com/google/uuid"
-
-// // // 	"tanmore_backend/internal/db/sqlc"
-// // // 	repo "tanmore_backend/internal/repository/checkout"
-// // // 	"tanmore_backend/pkg/errors"
-// // // 	"tanmore_backend/pkg/sqlnull"
-// // // 	"tanmore_backend/pkg/timeutil"
-// // // 	uuidutil "tanmore_backend/pkg/uuid"
-
-// // // 	"github.com/shopspring/decimal"
-// // // )
-
-// // // // ------------------------------------------------------------
-// // // // 📥 Input from handler
-// // // type CheckoutFromProductInput struct {
-// // // 	UserID    uuid.UUID
-// // // 	VariantID uuid.UUID
-// // // 	Quantity  int32
-// // // }
-
-// // // type CheckoutFromCartInput struct {
-// // // 	UserID     uuid.UUID
-// // // 	VariantIDs []uuid.UUID
-// // // }
-
-// // // // newly added
-// // // type GroupedCheckoutItemVariant struct {
-// // // 	VariantID        uuid.UUID `json:"variant_id"`
-// // // 	Color            string    `json:"color"`
-// // // 	Size             string    `json:"size"`
-// // // 	BuyingMode       string    `json:"buying_mode"`
-// // // 	UnitPrice        string    `json:"unit_price"`
-// // // 	HasDiscount      bool      `json:"has_discount"`
-// // // 	DiscountType     string    `json:"discount_type"`
-// // // 	DiscountValue    string    `json:"discount_value"`
-// // // 	RequiredQuantity int32     `json:"required_quantity"`
-// // // 	WeightGrams      int32     `json:"weight_grams"`
-// // // 	CreatedAt        time.Time `json:"created_at"`
-// // // }
-
-// // // type GroupedCheckoutItemProduct struct {
-// // // 	ProductID              uuid.UUID                    `json:"product_id"`
-// // // 	ProductTitle           string                       `json:"product_title"`
-// // // 	ProductDescription     string                       `json:"product_description"`
-// // // 	ProductPrimaryImageURL string                       `json:"product_primary_image_url"`
-// // // 	Variants               []GroupedCheckoutItemVariant `json:"variants"`
-// // // }
-
-// // // type GroupedCheckoutItemCategory struct {
-// // // 	CategoryID   uuid.UUID                    `json:"category_id"`
-// // // 	CategoryName string                       `json:"category_name"`
-// // // 	Products     []GroupedCheckoutItemProduct `json:"products"`
-// // // }
-
-// // // type GroupedCheckoutItemSeller struct {
-// // // 	SellerID        uuid.UUID                     `json:"seller_id"`
-// // // 	SellerStoreName string                        `json:"seller_store_name"`
-// // // 	Categories      []GroupedCheckoutItemCategory `json:"categories"`
-// // // }
-
-// // // // ------------------------------------------------------------
-// // // // 📤 Output to handler
-// // // // type CheckoutResult struct {
-// // // // 	CheckoutSessionID uuid.UUID           `json:"checkout_session_id,omitempty"`
-// // // // 	ValidItems        []sqlc.CheckoutItem `json:"valid_items"`
-// // // // 	InvalidItems      []map[string]string `json:"invalid_items"` // variant_id, reason
-// // // // }
-
-// // // type CheckoutResult struct {
-// // // 	CheckoutSessionID uuid.UUID                   `json:"checkout_session_id"`
-// // // 	ValidItems        []CheckoutItemResponse      `json:"valid_items"`
-// // // 	InvalidItems      []map[string]string         `json:"invalid_items"`
-// // // 	ValidItemsGrouped []GroupedCheckoutItemSeller `json:"valid_items_grouped"`
-// // // }
-
-// // // // one more stuct added
-// // // type CheckoutItemResponse struct {
-// // // 	ID                     uuid.UUID `json:"id"`
-// // // 	CheckoutSessionID      uuid.UUID `json:"checkout_session_id"`
-// // // 	UserID                 uuid.UUID `json:"user_id"`
-// // // 	SellerID               uuid.UUID `json:"seller_id"`
-// // // 	SellerStoreName        string    `json:"seller_store_name"`
-// // // 	CategoryID             uuid.UUID `json:"category_id"`
-// // // 	CategoryName           string    `json:"category_name"`
-// // // 	ProductID              uuid.UUID `json:"product_id"`
-// // // 	ProductTitle           string    `json:"product_title"`
-// // // 	ProductDescription     string    `json:"product_description"`
-// // // 	ProductPrimaryImageUrl string    `json:"product_primary_image_url"`
-// // // 	VariantID              uuid.UUID `json:"variant_id"`
-// // // 	Color                  string    `json:"color"`
-// // // 	Size                   string    `json:"size"`
-// // // 	BuyingMode             string    `json:"buying_mode"`
-// // // 	UnitPrice              string    `json:"unit_price"`
-// // // 	HasDiscount            bool      `json:"has_discount"`
-// // // 	DiscountType           string    `json:"discount_type"`
-// // // 	DiscountValue          string    `json:"discount_value"`
-// // // 	RequiredQuantity       int32     `json:"required_quantity"`
-// // // 	WeightGrams            int32     `json:"weight_grams"`
-// // // 	CreatedAt              time.Time `json:"created_at"`
-// // // }
-
-// // // // ------------------------------------------------------------
-// // // // 🧱 Service dependencies
-// // // type CheckoutServiceDeps struct {
-// // // 	Repo repo.CheckoutRepoInterface
-// // // }
-
-// // // // 🛠️ Service struct
-// // // type CheckoutService struct {
-// // // 	Deps CheckoutServiceDeps
-// // // }
-
-// // // // 🚀 Constructor
-// // // func NewCheckoutService(deps CheckoutServiceDeps) *CheckoutService {
-// // // 	return &CheckoutService{Deps: deps}
-// // // }
-
-// // // func (s *CheckoutService) FromProduct(
-// // // 	ctx context.Context,
-// // // 	input CheckoutFromProductInput,
-// // // ) (*CheckoutResult, error) {
-// // // 	variantIDs := []uuid.UUID{input.VariantID}
-
-// // // 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-// // // 	if err != nil {
-// // // 		return nil, errors.NewNotFoundError("user")
-// // // 	}
-// // // 	if user.IsBanned || user.IsArchived {
-// // // 		return nil, errors.NewAuthError("user is banned or archived")
-// // // 	}
-
-// // // 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-// // // 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-// // // 			UserID:     sqlnull.UUID(input.UserID),
-// // // 			VariantIds: variantIDs,
-// // // 		})
-// // // 	if err != nil {
-// // // 		return nil, errors.NewServerError("failed to fetch snapshot data")
-// // // 	}
-
-// // // 	// Inject quantity manually (not from cart)
-// // // 	for i := range rows {
-// // // 		rows[i].CartRequiredQuantity = sqlnull.Int32(int64(input.Quantity))
-// // // 	}
-
-// // // 	// added for debugging
-// // // 	for i, row := range rows {
-// // // 		fmt.Printf("Row %d → SellerID: %s, SellerStoreName: '%s'\n", i, row.Sellerid.String(), row.Sellerstorename)
-// // // 	}
-
-// // // 	// Process variants
-// // // 	subtotal, _, validItemsToInsert, validItemsForResponse, invalidItems := s.processVariants(input.UserID, variantIDs, rows)
-
-// // // 	if len(validItemsToInsert) == 0 {
-// // // 		reason := "invalid product variant"
-// // // 		if len(invalidItems) > 0 {
-// // // 			if msg, ok := invalidItems[0]["reason"]; ok {
-// // // 				reason = msg
-// // // 			}
-// // // 		}
-// // // 		return nil, errors.NewValidationError("variant_id", reason)
-// // // 	}
-
-// // // 	checkoutSessionID := uuidutil.New()
-// // // 	now := timeutil.NowUTC()
-
-// // // 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-// // // 		// 🧾 Step 1: Insert checkout session
-// // // 		sessionParams := sqlc.InsertCheckoutSessionParams{
-// // // 			ID:           checkoutSessionID,
-// // // 			UserID:       input.UserID,
-// // // 			Subtotal:     toDecimal(subtotal).String(),
-// // // 			TotalPayable: toDecimal(subtotal).String(),
-// // // 			// DeliveryCharge:    sqlnull.Float64Ptr(nil), // Will be filled later after shipping
-// // // 			DeliveryCharge:    sql.NullString{Valid: false},
-// // // 			ShippingAddressID: uuid.NullUUID{}, // Will be updated after shipping selection
-// // // 			CreatedAt:         now,
-// // // 		}
-
-// // // 		// Debug log (temporary)
-// // // 		fmt.Printf("[DEBUG] InsertCheckoutSessionParams: %+v\n", sessionParams)
-
-// // // 		_, err := q.InsertCheckoutSession(ctx, sessionParams)
-// // // 		if err != nil {
-// // // 			// Optional: log to console for debugging
-// // // 			fmt.Printf("[ERROR] Failed to insert checkout session: %v\n", err)
-// // // 			return err
-// // // 		}
-
-// // // 		// 🧾 Step 2: Insert valid checkout items
-// // // 		for i := range validItemsToInsert {
-// // // 			validItemsToInsert[i].CheckoutSessionID = checkoutSessionID
-
-// // // 			// Debug each item
-// // // 			fmt.Printf("[DEBUG] InsertCheckoutItemParams #%d: %+v\n", i, validItemsToInsert[i])
-
-// // // 			if _, err := q.InsertCheckoutItem(ctx, validItemsToInsert[i]); err != nil {
-// // // 				fmt.Printf("[ERROR] Failed to insert checkout item #%d: %v\n", i, err)
-// // // 				return err
-// // // 			}
-// // // 		}
-// // // 		return nil
-// // // 	})
-
-// // // 	if err != nil {
-// // // 		return nil, errors.NewServerError("failed to insert checkout session or items")
-// // // 	}
-// // // 	return &CheckoutResult{
-// // // 		CheckoutSessionID: checkoutSessionID,
-// // // 		ValidItems:        validItemsForResponse,
-// // // 		InvalidItems:      invalidItems,
-// // // 		ValidItemsGrouped: GroupValidCheckoutItems(validItemsForResponse),
-// // // 	}, nil
-
-// // // }
-
-// // // func (s *CheckoutService) FromCart(
-// // // 	ctx context.Context,
-// // // 	input CheckoutFromCartInput,
-// // // ) (*CheckoutResult, error) {
-// // // 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
-// // // 	if err != nil {
-// // // 		return nil, errors.NewNotFoundError("user")
-// // // 	}
-// // // 	if user.IsBanned || user.IsArchived {
-// // // 		return nil, errors.NewAuthError("user is banned or archived")
-// // // 	}
-
-// // // 	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx,
-// // // 		sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-// // // 			UserID:     sqlnull.UUID(input.UserID),
-// // // 			VariantIds: input.VariantIDs,
-// // // 		})
-// // // 	if err != nil {
-// // // 		return nil, errors.NewServerError("failed to fetch snapshot data")
-// // // 	}
-
-// // // 	// added for debugging
-// // // 	for i, row := range rows {
-// // // 		fmt.Printf("Row %d → SellerID: %s, SellerStoreName: '%s'\n", i, row.Sellerid.String(), row.Sellerstorename)
-// // // 	}
-
-// // // 	// subtotal, _, validItems, invalidItems := s.processVariants(input.UserID, input.VariantIDs, rows)
-// // // 	subtotal, _, validItemsToInsert, validItemsForResponse, invalidItems := s.processVariants(input.UserID, input.VariantIDs, rows)
-
-// // // 	if len(validItemsToInsert) == 0 {
-// // // 		return &CheckoutResult{
-// // // 			InvalidItems: invalidItems,
-// // // 			// ValidItems:   convertToCheckoutItems(nil), // empty slice
-// // // 			ValidItems: []CheckoutItemResponse{},
-// // // 		}, nil
-// // // 	}
-
-// // // 	checkoutSessionID := uuidutil.New()
-// // // 	now := timeutil.NowUTC()
-
-// // // 	err = s.Deps.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
-// // // 		// 🧾 Step 1: Insert checkout session
-// // // 		sessionParams := sqlc.InsertCheckoutSessionParams{
-// // // 			ID:           checkoutSessionID,
-// // // 			UserID:       input.UserID,
-// // // 			Subtotal:     toDecimal(subtotal).String(),
-// // // 			TotalPayable: toDecimal(subtotal).String(),
-// // // 			// DeliveryCharge:    "0.00", // Will be filled later after shipping
-// // // 			DeliveryCharge:    sql.NullString{Valid: false},
-// // // 			ShippingAddressID: uuid.NullUUID{}, // Will be updated after shipping selection
-// // // 			CreatedAt:         now,
-// // // 		}
-
-// // // 		// Debug log (temporary)
-// // // 		fmt.Printf("[DEBUG] InsertCheckoutSessionParams: %+v\n", sessionParams)
-
-// // // 		_, err := q.InsertCheckoutSession(ctx, sessionParams)
-// // // 		if err != nil {
-// // // 			// Optional: log to console for debugging
-// // // 			fmt.Printf("[ERROR] Failed to insert checkout session: %v\n", err)
-// // // 			return err
-// // // 		}
-
-// // // 		// 🧾 Step 2: Insert valid checkout items
-// // // 		for i := range validItemsToInsert {
-// // // 			validItemsToInsert[i].CheckoutSessionID = checkoutSessionID
-
-// // // 			// Debug each item
-// // // 			fmt.Printf("[DEBUG] InsertCheckoutItemParams #%d: %+v\n", i, validItemsToInsert[i])
-
-// // // 			if _, err := q.InsertCheckoutItem(ctx, validItemsToInsert[i]); err != nil {
-// // // 				fmt.Printf("[ERROR] Failed to insert checkout item #%d: %v\n", i, err)
-// // // 				return err
-// // // 			}
-// // // 		}
-// // // 		return nil
-// // // 	})
-
-// // // 	if err != nil {
-// // // 		return nil, errors.NewServerError("failed to insert checkout session or items")
-// // // 	}
-
-// // // 	return &CheckoutResult{
-// // // 		CheckoutSessionID: checkoutSessionID,
-// // // 		ValidItems:        validItemsForResponse,
-// // // 		InvalidItems:      invalidItems,
-// // // 		ValidItemsGrouped: GroupValidCheckoutItems(validItemsForResponse),
-// // // 	}, nil
-
-// // // }
-
-// // // func (s *CheckoutService) processVariants(
-// // // 	userID uuid.UUID,
-// // // 	requestedVariantIDs []uuid.UUID,
-// // // 	rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow,
-// // // ) (int64, int64, []sqlc.InsertCheckoutItemParams, []CheckoutItemResponse, []map[string]string) {
-
-// // // 	var (
-// // // 		subtotal           int64
-// // // 		totalWeight        int64
-// // // 		validItems         []sqlc.InsertCheckoutItemParams
-// // // 		validItemsResponse []CheckoutItemResponse
-// // // 		invalidItems       []map[string]string
-// // // 		now                = timeutil.NowUTC()
-// // // 	)
-
-// // // 	foundMap := make(map[uuid.UUID]bool)
-
-// // // 	for idx, row := range rows {
-// // // 		foundMap[row.CartVariantID] = true
-
-// // // 		// 🧪 Debug: Check incoming row store name
-// // // 		fmt.Printf("[ROW %d] seller_store_name from row: '%s'\n", idx, row.Sellerstorename)
-
-// // // 		quantity := int32(0)
-// // // 		if row.CartRequiredQuantity.Valid {
-// // // 			quantity = row.CartRequiredQuantity.Int32
-// // // 		}
-
-// // // 		if !row.Issellerapproved || row.Issellerarchived || row.Issellerbanned ||
-// // // 			!row.Isproductapproved || row.Isproductarchived || row.Isproductbanned ||
-// // // 			row.Isvariantarchived || !row.Isvariantinstock || quantity == 0 {
-
-// // // 			invalidItems = append(invalidItems, map[string]string{
-// // // 				"variant_id":    row.CartVariantID.String(),
-// // // 				"reason":        "variant unavailable due to moderation or stock",
-// // // 				"product_id":    row.Productid.String(),
-// // // 				"product_title": row.Producttitle,
-// // // 				"color":         row.Color,
-// // // 				"size":          row.Size,
-// // // 			})
-// // // 			continue
-// // // 		}
-
-// // // 		// [pricing logic remains unchanged...]
-// // // 		buyingMode := "retail"
-// // // 		unitPrice := row.Retailprice
-// // // 		hasDiscount := false
-// // // 		discountType := ""
-// // // 		discountValue := int64(0)
-
-// // // 		if row.Haswholesaleenabled && row.Wholesaleminquantity.Valid && quantity >= row.Wholesaleminquantity.Int32 {
-// // // 			buyingMode = "wholesale"
-// // // 			if row.Wholesaleprice.Valid {
-// // // 				unitPrice = row.Wholesaleprice.Int64
-// // // 			}
-// // // 			if row.Haswholesalediscount && row.Wholesalediscount.Valid && row.Wholesalediscounttype.Valid {
-// // // 				hasDiscount = true
-// // // 				discountType = row.Wholesalediscounttype.String
-// // // 				discountValue = row.Wholesalediscount.Int64
-// // // 				switch discountType {
-// // // 				case "flat":
-// // // 					unitPrice -= discountValue
-// // // 				case "percentage":
-// // // 					unitPrice -= (unitPrice * discountValue) / 100
-// // // 				}
-// // // 				if unitPrice < 0 {
-// // // 					unitPrice = 0
-// // // 				}
-// // // 			}
-// // // 		} else {
-// // // 			if row.Hasretaildiscount && row.Retaildiscount.Valid && row.Retaildiscounttype.Valid {
-// // // 				hasDiscount = true
-// // // 				discountType = row.Retaildiscounttype.String
-// // // 				discountValue = row.Retaildiscount.Int64
-// // // 				switch discountType {
-// // // 				case "flat":
-// // // 					unitPrice -= discountValue
-// // // 				case "percentage":
-// // // 					unitPrice -= (unitPrice * discountValue) / 100
-// // // 				}
-// // // 				if unitPrice < 0 {
-// // // 					unitPrice = 0
-// // // 				}
-// // // 			}
-// // // 		}
-
-// // // 		itemTotal := unitPrice * int64(quantity)
-// // // 		subtotal += itemTotal
-// // // 		totalWeight += int64(quantity) * int64(row.WeightGrams)
-
-// // // 		item := sqlc.InsertCheckoutItemParams{
-// // // 			ID:                     uuidutil.New(),
-// // // 			CheckoutSessionID:      uuid.UUID{},
-// // // 			UserID:                 userID,
-// // // 			SellerID:               row.Sellerid,
-// // // 			SellerStoreName:        row.Sellerstorename,
-// // // 			CategoryID:             row.Categoryid,
-// // // 			CategoryName:           row.Categoryname,
-// // // 			ProductID:              row.Productid,
-// // // 			ProductTitle:           row.Producttitle,
-// // // 			ProductDescription:     row.Productdescription,
-// // // 			ProductPrimaryImageUrl: row.Productprimaryimageurl,
-// // // 			VariantID:              row.CartVariantID,
-// // // 			Color:                  row.Color,
-// // // 			Size:                   row.Size,
-// // // 			BuyingMode:             buyingMode,
-// // // 			UnitPrice:              toDecimal(unitPrice).String(),
-// // // 			HasDiscount:            hasDiscount,
-// // // 			DiscountType:           discountType,
-// // // 			DiscountValue:          toDecimal(discountValue).String(),
-// // // 			RequiredQuantity:       quantity,
-// // // 			WeightGrams:            int32(row.WeightGrams),
-// // // 			CreatedAt:              now,
-// // // 		}
-
-// // // 		// 🧪 Debug: Check right after creating item struct
-// // // 		fmt.Printf("[INSERT PARAMS %d] seller_store_name before append: '%s'\n", idx, item.SellerStoreName)
-
-// // // 		validItems = append(validItems, item)
-
-// // // 		// 🧪 Debug: Final check in response
-// // // 		fmt.Printf("[RESPONSE BUILD %d] seller_store_name before response append: '%s'\n", idx, item.SellerStoreName)
-
-// // // 		validItemsResponse = append(validItemsResponse, CheckoutItemResponse{
-// // // 			ID:                     item.ID,
-// // // 			CheckoutSessionID:      item.CheckoutSessionID,
-// // // 			UserID:                 item.UserID,
-// // // 			SellerID:               item.SellerID,
-// // // 			SellerStoreName:        item.SellerStoreName,
-// // // 			CategoryID:             item.CategoryID,
-// // // 			CategoryName:           item.CategoryName,
-// // // 			ProductID:              item.ProductID,
-// // // 			ProductTitle:           item.ProductTitle,
-// // // 			ProductDescription:     item.ProductDescription,
-// // // 			ProductPrimaryImageUrl: item.ProductPrimaryImageUrl,
-// // // 			VariantID:              item.VariantID,
-// // // 			Color:                  item.Color,
-// // // 			Size:                   item.Size,
-// // // 			BuyingMode:             item.BuyingMode,
-// // // 			UnitPrice:              item.UnitPrice,
-// // // 			HasDiscount:            item.HasDiscount,
-// // // 			DiscountType:           item.DiscountType,
-// // // 			DiscountValue:          item.DiscountValue,
-// // // 			RequiredQuantity:       item.RequiredQuantity,
-// // // 			WeightGrams:            item.WeightGrams,
-// // // 			CreatedAt:              item.CreatedAt,
-// // // 		})
-// // // 	}
-
-// // // 	// Handle not-found variants
-// // // 	for _, id := range requestedVariantIDs {
-// // // 		if !foundMap[id] {
-// // // 			invalidItems = append(invalidItems, map[string]string{
-// // // 				"variant_id":    id.String(),
-// // // 				"reason":        "variant not found in system",
-// // // 				"product_id":    "00000000-0000-0000-0000-000000000000",
-// // // 				"product_title": "",
-// // // 				"color":         "",
-// // // 				"size":          "",
-// // // 			})
-// // // 		}
-// // // 	}
-
-// // // 	return subtotal, totalWeight, validItems, validItemsResponse, invalidItems
-// // // }
-
-// // // // Convert int64 price to DECIMAL(10,2)
-// // // func toDecimal(val int64) decimal.Decimal {
-// // // 	return decimal.NewFromInt(val).Div(decimal.NewFromInt(100))
-// // // }
-
-// // // // Convert params to public-facing CheckoutItem struct
-// // // func convertToCheckoutItems(params []CheckoutItemResponse) []sqlc.CheckoutItem {
-// // // 	items := make([]sqlc.CheckoutItem, 0, len(params))
-// // // 	for _, p := range params {
-// // // 		items = append(items, sqlc.CheckoutItem{
-// // // 			ID:                     p.ID,
-// // // 			CheckoutSessionID:      p.CheckoutSessionID,
-// // // 			UserID:                 p.UserID,
-// // // 			SellerID:               p.SellerID,
-// // // 			CategoryID:             p.CategoryID,
-// // // 			CategoryName:           p.CategoryName,
-// // // 			ProductID:              p.ProductID,
-// // // 			ProductTitle:           p.ProductTitle,
-// // // 			ProductDescription:     p.ProductDescription,
-// // // 			ProductPrimaryImageUrl: p.ProductPrimaryImageUrl,
-// // // 			VariantID:              p.VariantID,
-// // // 			Color:                  p.Color,
-// // // 			Size:                   p.Size,
-// // // 			BuyingMode:             p.BuyingMode,
-// // // 			UnitPrice:              p.UnitPrice,
-// // // 			HasDiscount:            p.HasDiscount,
-// // // 			DiscountType:           p.DiscountType,
-// // // 			DiscountValue:          p.DiscountValue,
-// // // 			RequiredQuantity:       p.RequiredQuantity,
-// // // 			WeightGrams:            p.WeightGrams,
-// // // 			CreatedAt:              p.CreatedAt,
-// // // 		})
-// // // 	}
-// // // 	return items
-// // // }
-
-// // // // newly added
-
-// // // func GroupValidCheckoutItems(
-// // // 	items []CheckoutItemResponse,
-// // // ) []GroupedCheckoutItemSeller {
-
-// // // 	sellerMap := make(map[uuid.UUID]*GroupedCheckoutItemSeller)
-
-// // // 	for _, item := range items {
-// // // 		// 🧱 Seller level
-// // // 		seller, ok := sellerMap[item.SellerID]
-// // // 		if !ok {
-// // // 			seller = &GroupedCheckoutItemSeller{
-// // // 				SellerID:        item.SellerID,
-// // // 				SellerStoreName: item.SellerStoreName,
-// // // 				Categories:      []GroupedCheckoutItemCategory{},
-// // // 			}
-// // // 			sellerMap[item.SellerID] = seller
-// // // 		}
-
-// // // 		// 🧱 Category level
-// // // 		var category *GroupedCheckoutItemCategory
-// // // 		for i := range seller.Categories {
-// // // 			if seller.Categories[i].CategoryID == item.CategoryID {
-// // // 				category = &seller.Categories[i]
-// // // 				break
-// // // 			}
-// // // 		}
-// // // 		if category == nil {
-// // // 			seller.Categories = append(seller.Categories, GroupedCheckoutItemCategory{
-// // // 				CategoryID:   item.CategoryID,
-// // // 				CategoryName: item.CategoryName,
-// // // 				Products:     []GroupedCheckoutItemProduct{},
-// // // 			})
-// // // 			category = &seller.Categories[len(seller.Categories)-1]
-// // // 		}
-
-// // // 		// 🧱 Product level
-// // // 		var product *GroupedCheckoutItemProduct
-// // // 		for i := range category.Products {
-// // // 			if category.Products[i].ProductID == item.ProductID {
-// // // 				product = &category.Products[i]
-// // // 				break
-// // // 			}
-// // // 		}
-// // // 		if product == nil {
-// // // 			category.Products = append(category.Products, GroupedCheckoutItemProduct{
-// // // 				ProductID:              item.ProductID,
-// // // 				ProductTitle:           item.ProductTitle,
-// // // 				ProductDescription:     item.ProductDescription,
-// // // 				ProductPrimaryImageURL: item.ProductPrimaryImageUrl,
-// // // 				Variants:               []GroupedCheckoutItemVariant{},
-// // // 			})
-// // // 			product = &category.Products[len(category.Products)-1]
-// // // 		}
-
-// // // 		// 🧱 Variant level
-// // // 		product.Variants = append(product.Variants, GroupedCheckoutItemVariant{
-// // // 			VariantID:        item.VariantID,
-// // // 			Color:            item.Color,
-// // // 			Size:             item.Size,
-// // // 			BuyingMode:       item.BuyingMode,
-// // // 			UnitPrice:        item.UnitPrice,
-// // // 			HasDiscount:      item.HasDiscount,
-// // // 			DiscountType:     item.DiscountType,
-// // // 			DiscountValue:    item.DiscountValue,
-// // // 			RequiredQuantity: item.RequiredQuantity,
-// // // 			WeightGrams:      item.WeightGrams,
-// // // 			CreatedAt:        item.CreatedAt,
-// // // 		})
-// // // 	}
-
-// // // 	// Convert map to slice
-// // // 	var grouped []GroupedCheckoutItemSeller
-// // // 	for _, s := range sellerMap {
-// // // 		grouped = append(grouped, *s)
-// // // 	}
-// // // 	return grouped
-// // // }
+// --------------------------------------------------------------------------------------------------------------------------------------
+// --------------------------------------------------------------------------------------------------------------------------------------
+// ────────────────────────────────────────
+// A) WHEN IT COMES FROM PRODUCT PAGE (“Buy Now”) → `FromProduct()`
+// ────────────────────────────────────────
+
+// Input you receive:
+
+// * `UserID`
+// * `VariantID` (the specific size/color variant)
+// * `Quantity`
+
+// Goal:
+
+// * Create checkout session + one checkout item (based on product snapshot), without touching cart.
+
+// Step 1: Make a list of variants
+
+// * Code: `variantIDs := []uuid.UUID{input.VariantID}`
+// * Why: The processing function is written to handle “a list”, even if it’s just one.
+
+// Step 2: Check the user is allowed (User moderation check)
+
+// * Code calls: `Repo.GetUserByID(ctx, input.UserID)`
+// * DB table: `users`
+// * Validation:
+
+//   * if user not found → `ErrAuthUserNotFound()`
+//   * if archived → `ErrAuthArchivedUser()`
+//   * if banned → `ErrAuthBannedUser()`
+// * If any fails, stop here.
+
+// Step 3: Fetch the “snapshot” of the product variant
+
+// * Code calls: `Repo.GetVariantSnapshotsByVariantIDs(ctx, variantIDs)`
+// * DB table: `product_variant_snapshots`
+// * What is snapshot? A frozen/cached record of seller/product/variant info (title, price, weight, moderation flags, stock status, etc.) that checkout can rely on.
+// * IMPORTANT: This step does NOT look at `cart_items` at all.
+
+// Step 4: Prepare quantity mapping
+
+// * Code:
+
+//   * `qtyByVariant := map[uuid.UUID]int32{ input.VariantID: input.Quantity }`
+// * Why mapping? Because snapshots list may contain multiple variants, and you need to know quantity per variant.
+
+// Step 5: Validate snapshot + build checkout items (the processor)
+
+// * Code calls: `processSnapshotsForCheckout(...)`
+// * This function does the “core logic”:
+
+//   * (a) Check quantity > 0
+//   * (b) Check moderation flags:
+
+//     * seller banned/archived/not approved
+//     * product banned/archived/not approved
+//     * category archived
+//     * variant archived / out of stock flag false
+//   * (c) Stock check (strict):
+
+//     * if quantity > stockamount → invalid
+//   * (d) Compute:
+
+//     * line price = unitPrice * qty
+//     * subtotal += line price
+//     * totalWeight += qty * weight
+//   * (e) Build `InsertCheckoutItemParams` struct:
+
+//     * seller id, product title, variant id, unit price, required qty, etc.
+
+// At the end of processor:
+
+// * If items list is empty, you return validation error:
+
+//   * `variant_id: variant unavailable` or some reason like “insufficient stock”, “moderated”, etc.
+
+// Step 6: Choose platform promotion (optional discount)
+
+// * Code calls: `selectPlatformPromotion(ctx, subtotal)`
+// * DB table: promotion table (whatever `GetActivePlatformPromotions` reads)
+// * It:
+
+//   * loads promotions
+//   * checks time window (start/end)
+//   * checks min/max cart value
+//   * picks the lowest priority promo
+//   * calculates promoAmount (flat or percent)
+// * Result:
+
+//   * promo (chosen promo row or empty)
+//   * promoAmount (int64 cents)
+
+// Step 7: Compute total payable
+
+// * `totalPayable = max(subtotal - promoAmount, 0)`
+
+// Step 8: Create checkout session + checkout items inside a transaction
+
+// * Code: `Repo.WithTx(ctx, func(q *sqlc.Queries) error { ... })`
+// * Inside transaction:
+
+// 8.1 Insert one row in `checkout_sessions`
+
+// * Query: `InsertCheckoutSession`
+// * Table: `checkout_sessions`
+// * Contains:
+
+//   * subtotal, totalWeight
+//   * promo metadata saved
+//   * status = `awaiting_shipping_info`
+//   * paymentMethod = `cod`
+//   * shipping address empty for now
+
+// 8.2 Insert one row per item in `checkout_items`
+
+// * Query: `InsertCheckoutItem` (loop)
+// * Table: `checkout_items`
+// * Each row stores the snapshot-based info (so later price/title changes don’t break the checkout history)
+
+// Step 9: Return minimal response
+
+// * `checkout_session_id` + message
+
+// So product page flow summary (kid version):
+
+// 1. Check user ok
+// 2. Read product snapshot from `product_variant_snapshots`
+// 3. Validate stock/moderation
+// 4. Compute subtotal + weight
+// 5. Pick promo
+// 6. Insert session + items (transaction)
+// 7. Return session id
+
+// ────────────────────────────────────────
+// B) WHEN IT COMES FROM CART PAGE → `FromCart()`
+// ────────────────────────────────────────
+
+// Input you receive:
+
+// * `UserID`
+// * `VariantIDs []uuid.UUID` (selected items from cart, or all cart items)
+
+// Goal:
+
+// * Only allow checkout for items that are actually in the user’s cart (and active), and use the cart quantities.
+
+// Step 1: Validate user
+
+// * Same logic: `GetUserByID`, block archived/banned.
+
+// Step 2: Fetch cart rows joined with snapshot rows
+
+// * Code calls: `GetActiveCartVariantSnapshotsByUserAndVariantIDs(...)`
+// * DB tables involved:
+
+//   * `cart_items` (ci)
+//   * `product_variant_snapshots` (pvs)
+// * Query logic:
+
+//   * Only active cart items: `ci.is_active = true`
+//   * Only this user: `ci.user_id = $userID`
+//   * Only requested variants: `ci.variant_id = ANY($variant_ids)`
+// * It returns rows that contain:
+
+//   * cart info (required_quantity)
+//   * snapshot info (seller/product/variant details)
+
+// Why join for cart flow?
+// Because cart flow wants:
+
+// * proof that the item is really in cart
+// * plus the snapshot info needed to make checkout items
+
+// Step 3: Process + validate variants (cart processor)
+
+// * Code calls: `processVariants(userID, requestedVariantIDs, rows)`
+// * In this processor:
+
+//   * Reads qty from `cart_required_quantity`
+//   * Checks moderation flags + variant instock + not archived
+//   * (NOTE: your current cart processor does NOT enforce `stockamount` cap; it only checks `isvariantinstock`. You might want to add stockamount check here too, same as product flow.)
+//   * Computes subtotal + weight
+//   * Builds checkout item structs
+
+// Also it checks missing variants:
+
+// * If you requested a variant ID but it didn’t appear in returned rows, it means:
+
+//   * it’s not in cart OR not active
+// * Then it adds invalid reason: “variant not found”
+
+// Step 4: Choose platform promo
+
+// * Same promo selection logic
+
+// Step 5: Insert checkout session + items in transaction
+
+// * Same as product flow:
+
+//   * insert into `checkout_sessions`
+//   * insert into `checkout_items`
+
+// Step 6: Return minimal response
+
+// * session id + message
+
+// Cart page flow summary (kid version):
+
+// 1. Check user ok
+// 2. Read cart items + snapshots using join (must be in cart)
+// 3. Validate each item + quantity
+// 4. Compute subtotal + weight
+// 5. Pick promo
+// 6. Insert session + items (transaction)
+// 7. Return session id
+
+// ────────────────────────────────────────
+// C) “ALGORITHMIC PICTURE” (easy mental model)
+// ────────────────────────────────────────
+
+// Two inputs → one output.
+
+// Input A: Product Page
+
+// * variantID + quantity
+// * snapshots fetched directly from `product_variant_snapshots`
+// * cart is ignored
+
+// Input B: Cart Page
+
+// * variantIDs (cart selections)
+// * snapshots fetched through `cart_items JOIN product_variant_snapshots`
+// * cart membership is enforced
+
+// Both produce:
+
+// * `checkout_sessions` row (1)
+// * `checkout_items` rows (N)
+
+// ────────────────────────────────────────
+// D) What changed “before vs after” (important for future you)
+// ────────────────────────────────────────
+
+// Before (buggy):
+
+// * Product page was also calling the CART JOIN query.
+// * If product isn’t in cart → JOIN returns no rows → “variant not found”.
+
+// After (fixed):
+
+// * Product page uses snapshots-only query.
+// * Cart page still uses cart join query (good because it enforces “must be in cart”).
+
+// ────────────────────────────────────────
+// E) Two small “future-safety” notes worth saving
+// ────────────────────────────────────────
+
+// 1. Stock enforcement inconsistency
+
+// * Product flow checks `qty <= stockamount`.
+// * Cart flow currently does NOT check `stockamount`, only checks `isvariantinstock`.
+//   You should decide: do you want strict stock in cart flow too? Usually yes.
+
+// 2. Discount metadata vs price calculation
+
+// * You’re storing discount metadata in checkout items, but not modifying the unit price/subtotal with retail discount.
+//   That’s okay if “retail discount” is only informational right now, but later you’ll want a single source of truth for pricing rules.
+
+// If you want, I can write a short comment block you can paste directly above `FromProduct()` and `FromCart()` that documents this in 10–15 lines, so future dev sees it instantly.

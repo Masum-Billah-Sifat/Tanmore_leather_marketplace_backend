@@ -10,7 +10,6 @@ import (
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/cart/cart_summary"
 	"tanmore_backend/pkg/errors"
-	"tanmore_backend/pkg/sqlnull"
 
 	"github.com/google/uuid"
 )
@@ -18,9 +17,8 @@ import (
 // ------------------------------------------------------------
 // 📥 Input from handler
 type CartSummaryInput struct {
-	UserID      *uuid.UUID
-	GuestUserID *uuid.UUID
-	VariantIDs  []uuid.UUID
+	UserID     uuid.UUID
+	VariantIDs []uuid.UUID
 }
 
 // 📤 Output returned to handler
@@ -60,66 +58,22 @@ func (s *CartSummaryService) Start(
 	input CartSummaryInput,
 ) (*CartSummaryResult, error) {
 
-	// Step 1: Validate user (if authenticated)
-	if input.UserID != nil {
-		user, err := s.Deps.Repo.GetUserByID(ctx, *input.UserID)
-		if err != nil {
-			return nil, errors.NewNotFoundError("user")
-		}
-		if user.IsArchived {
-			return nil, errors.NewAuthError("user is archived")
-		}
-		if user.IsBanned {
-			return nil, errors.NewAuthError("user is banned")
-		}
+	// Step 1: Validate user
+	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
+	if err != nil {
+		return nil, errors.ErrAuthUserNotFound()
+	}
+	if user.IsArchived {
+		return nil, errors.ErrAuthArchivedUser()
+	}
+	if user.IsBanned {
+		return nil, errors.ErrAuthBannedUser()
 	}
 
-	// // Step 2: Fetch variant snapshots based on owner type
-	// var rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow
-
-	// if input.UserID != nil {
-	// 	rows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-	// 		UserID:     sqlnull.UUIDPtr(input.UserID),
-	// 		VariantIds: input.VariantIDs,
-	// 	})
-	// } else {
-	// 	var guestRows []sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow
-
-	// 	guestRows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams{
-	// 		GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
-	// 		VariantIds:  input.VariantIDs,
-	// 	})
-
-	// 	// 🪄 Convert guestRows to unified []userRow type so rest of code works
-	// 	for _, r := range guestRows {
-	// 		rows = append(rows, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow(r))
-	// 	}
-
-	// }
-
-	// Step 2: Fetch variant snapshots based on owner type
-	var (
-		rows []sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow
-		err  error
-	)
-
-	if input.UserID != nil {
-		rows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
-			UserID:     sqlnull.UUIDPtr(input.UserID),
-			VariantIds: input.VariantIDs,
-		})
-	} else {
-		var guestRows []sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsRow
-		guestRows, err = s.Deps.Repo.GetActiveCartVariantSnapshotsByGuestAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByGuestAndVariantIDsParams{
-			GuestUserID: sqlnull.UUIDPtr(input.GuestUserID),
-			VariantIds:  input.VariantIDs,
-		})
-
-		// 🪄 Cast guestRows → userRow slice
-		for _, r := range guestRows {
-			rows = append(rows, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsRow(r))
-		}
-	}
+	rows, err := s.Deps.Repo.GetActiveCartVariantSnapshotsByUserAndVariantIDs(ctx, sqlc.GetActiveCartVariantSnapshotsByUserAndVariantIDsParams{
+		UserID:     input.UserID,
+		VariantIds: input.VariantIDs,
+	})
 
 	if err != nil {
 		return nil, errors.NewServerError("failed to fetch cart variant snapshots")
