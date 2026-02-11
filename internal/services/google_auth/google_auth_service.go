@@ -168,7 +168,7 @@ func (s *GoogleAuthService) Start(ctx context.Context, input GoogleLoginInput) (
 		return nil, err
 	}
 
-	accessToken, err := tokenutil.GenerateAccessToken(userID, sessionID, "customer", 1)
+	accessToken, err := tokenutil.GenerateAccessToken(userID, sessionID, "customer", 15)
 	if err != nil {
 		return nil, errors.NewServerError("generate access token")
 	}

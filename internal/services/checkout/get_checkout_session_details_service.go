@@ -68,13 +68,13 @@ func (s *GetCheckoutSessionDetailsService) Start(
 	// Step 1: Validate customer
 	user, err := s.Deps.Repo.GetUserByID(ctx, input.UserID)
 	if err != nil {
-		return nil, errors.NewNotFoundError("user")
+		return nil, errors.ErrAuthUserNotFound()
 	}
 	if user.IsArchived {
-		return nil, errors.NewAuthError("user is archived")
+		return nil, errors.ErrAuthArchivedUser()
 	}
 	if user.IsBanned {
-		return nil, errors.NewAuthError("user is banned")
+		return nil, errors.ErrAuthBannedUser()
 	}
 
 	// Step 2: Get checkout session

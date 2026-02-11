@@ -81,7 +81,11 @@ func (s *MediaService) GeneratePresignedUploadURL(
 	log.Println("✅ [MEDIA] storage presign success")
 
 	// 🌍 Step 4: Build public URL
-	mediaURL := fmt.Sprintf("https://cdn.tanmore.com/%s", objectName)
+	// old one never worked
+	// mediaURL := fmt.Sprintf("https://cdn.tanmore.com/%s", objectName)
+
+	// 🌍 Step 4: Build public URL (stable for dev/prod if bucket is public or behind CDN)
+	mediaURL := storage.BuildPublicObjectURL(objectName)
 
 	log.Println("🌍 [MEDIA] public media URL:", mediaURL)
 

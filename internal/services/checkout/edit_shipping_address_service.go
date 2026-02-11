@@ -77,14 +77,29 @@ func (s *EditShippingAddressService) Start(ctx context.Context, input EditShippi
 	err := s.Repo.WithTx(ctx, func(q *sqlc.Queries) error {
 		// Step 1: Validate customer
 		user, err := q.GetUserByID(ctx, input.UserID)
-		if err != nil || user.IsArchived || user.IsBanned {
-			return errors.NewAuthError("invalid or blocked user")
+		if err != nil {
+			return errors.ErrAuthUserNotFound()
+		}
+		if user.IsArchived {
+			return errors.ErrAuthArchivedUser()
+		}
+		if user.IsBanned {
+			return errors.ErrAuthBannedUser()
 		}
 
 		// Step 2: Validate session
 		session, err := q.GetCheckoutSessionByID(ctx, input.CheckoutSessionID)
 		if err != nil || session.UserID != input.UserID {
 			return errors.NewAuthError("unauthorized access to session")
+		}
+
+		// after session fetch + ownership check
+		if session.Status != "ready_to_order" {
+			return errors.NewValidationError("checkout_session", "invalid session status")
+		}
+
+		if !session.ShippingAddressID.Valid || session.ShippingAddressID.UUID != input.ShippingAddressID {
+			return errors.NewValidationError("shipping_address_id", "does not match checkout session")
 		}
 
 		// Step 3: Validate shipping address belongs to session

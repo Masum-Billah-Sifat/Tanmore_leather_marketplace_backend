@@ -155,6 +155,27 @@ func (q *Queries) InsertCheckoutSession(ctx context.Context, arg InsertCheckoutS
 	return id, err
 }
 
+const markCheckoutSessionReadyToOrder = `-- name: MarkCheckoutSessionReadyToOrder :one
+UPDATE checkout_sessions
+SET status = 'ready_to_order'
+WHERE id = $1
+  AND user_id = $2
+  AND status = 'awaiting_shipping_info'
+RETURNING id
+`
+
+type MarkCheckoutSessionReadyToOrderParams struct {
+	ID     uuid.UUID `json:"id"`
+	UserID uuid.UUID `json:"user_id"`
+}
+
+func (q *Queries) MarkCheckoutSessionReadyToOrder(ctx context.Context, arg MarkCheckoutSessionReadyToOrderParams) (uuid.UUID, error) {
+	row := q.db.QueryRowContext(ctx, markCheckoutSessionReadyToOrder, arg.ID, arg.UserID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const updateCheckoutSessionDeliveryPricing = `-- name: UpdateCheckoutSessionDeliveryPricing :exec
 UPDATE checkout_sessions
 SET

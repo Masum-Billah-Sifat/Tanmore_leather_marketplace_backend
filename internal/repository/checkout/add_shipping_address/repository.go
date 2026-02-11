@@ -85,3 +85,12 @@ func (r *AddShippingAddressRepository) UpdateCheckoutSessionWithShipping(
 ) error {
 	return r.q.UpdateCheckoutSessionWithShipping(ctx, arg)
 }
+
+// internal/repository/checkout/add_shipping_address/add_shipping_address_repository.go
+
+func (r *AddShippingAddressRepository) MarkCheckoutSessionReadyToOrder(
+	ctx context.Context,
+	arg sqlc.MarkCheckoutSessionReadyToOrderParams,
+) (uuid.UUID, error) {
+	return r.q.MarkCheckoutSessionReadyToOrder(ctx, arg)
+}

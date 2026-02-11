@@ -4,14 +4,19 @@
 //     - Verifies customer validity
 //     - Validates session ownership and status
 //     - Calls Pathao API for delivery charge
-//     - Inserts address and updates checkout in single step
+//     - Inserts address and updates checkout in single transaction
+//     - ✅ Marks checkout session as ready_to_order when done
 
 package checkout
 
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
+	stdErrors "errors"
+	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"time"
@@ -19,8 +24,6 @@ import (
 	"tanmore_backend/internal/db/sqlc"
 	repo "tanmore_backend/internal/repository/checkout/add_shipping_address"
 	"tanmore_backend/pkg/errors"
-
-	// "tanmore_backend/pkg/httpclient"
 	"tanmore_backend/pkg/sqlnull"
 	"tanmore_backend/pkg/timeutil"
 
@@ -75,10 +78,18 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 		// Step 1️⃣: Validate user
 		user, err := q.GetUserByID(ctx, input.UserID)
 		if err != nil {
-			return errors.NewNotFoundError("user")
+			return errors.ErrAuthUserNotFound()
 		}
-		if user.IsArchived || user.IsBanned {
-			return errors.NewAuthError("user is not allowed to place orders")
+		if user.IsArchived {
+			return errors.ErrAuthArchivedUser()
+		}
+		if user.IsBanned {
+			return errors.ErrAuthBannedUser()
+		}
+
+		// Optional guard (handler likely already validates)
+		if input.PaymentMethod != "cod" && input.PaymentMethod != "prepaid" {
+			return errors.NewValidationError("payment_method", "must be 'cod' or 'prepaid'")
 		}
 
 		// Step 2️⃣: Validate session
@@ -89,7 +100,7 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 		if session.UserID != input.UserID {
 			return errors.NewAuthError("checkout session ownership mismatch")
 		}
-		if session.Status != "awaiting_for_shipping" {
+		if session.Status != "awaiting_shipping_info" {
 			return errors.NewValidationError("checkout_session", "invalid session status")
 		}
 
@@ -114,14 +125,21 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 		}
 
 		body, _ := json.Marshal(pathaoReq)
-		req, _ := http.NewRequest("POST", "https://sandbox.pathao.com/aladdin/api/v1/merchant/price-plan", bytes.NewReader(body))
+		req, _ := http.NewRequest(
+			"POST",
+			"https://sandbox.pathao.com/aladdin/api/v1/merchant/price-plan",
+			bytes.NewReader(body),
+		)
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+s.PathaoToken)
 
 		client := &http.Client{Timeout: 5 * time.Second}
 		resp, err := client.Do(req)
+		if resp != nil && resp.Body != nil {
+			defer resp.Body.Close()
+		}
 
-		if err == nil && resp.StatusCode == 200 {
+		if err == nil && resp != nil && resp.StatusCode == 200 {
 			var parsed struct {
 				Data struct {
 					FinalPrice float64 `json:"final_price"`
@@ -133,26 +151,43 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 			}
 		}
 
-		subtotal, _ := strconv.Atoi(session.Subtotal)
-		discount := 0
-		if session.PlatformDiscountAmountApplied.Valid {
-			discount, _ = strconv.Atoi(session.PlatformDiscountAmountApplied.String)
-		}
-		totalPayable := subtotal - discount + deliveryCharge
-
 		shippingID := uuid.New()
+
+		// Money math in cents
+		subtotalCents, err := moneyToCentsTwo(session.Subtotal)
+		if err != nil {
+			return errors.NewServerError("invalid subtotal format in checkout session")
+		}
+
+		discountCents := int64(0)
+		if session.PlatformDiscountAmountApplied.Valid {
+			d, err := moneyToCentsTwo(session.PlatformDiscountAmountApplied.String)
+			if err != nil {
+				return errors.NewServerError("invalid discount format in checkout session")
+			}
+			discountCents = d
+		}
+
+		deliveryChargeCents := int64(deliveryCharge) * 100
+
+		totalPayableCents := subtotalCents - discountCents + deliveryChargeCents
+		if totalPayableCents < 0 {
+			totalPayableCents = 0
+		}
+
+		// Update checkout totals + attach shipping_id
 		err = q.UpdateCheckoutSessionWithShipping(ctx, sqlc.UpdateCheckoutSessionWithShippingParams{
 			ShippingAddressID: sqlnull.UUID(shippingID),
 			PaymentMethod:     input.PaymentMethod,
-			DeliveryCharge:    sqlnull.String(strconv.Itoa(deliveryCharge)),
-			TotalPayable:      strconv.Itoa(totalPayable),
-
-			ID: input.CheckoutSessionID,
+			DeliveryCharge:    sqlnull.String(centsToMoneyTwo(deliveryChargeCents)),
+			TotalPayable:      centsToMoneyTwo(totalPayableCents),
+			ID:                input.CheckoutSessionID,
 		})
 		if err != nil {
 			return errors.NewTableError("checkout_sessions.update_shipping", err.Error())
 		}
 
+		// Insert shipping address row
 		_, err = q.InsertShippingAddress(ctx, sqlc.InsertShippingAddressParams{
 			ID:                shippingID,
 			CheckoutSessionID: input.CheckoutSessionID,
@@ -164,14 +199,25 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 			CityID:            input.CityID,
 			ZoneID:            input.ZoneID,
 			AreaID:            input.AreaID,
-
-			Latitude:  sqlnull.StringPtr(floatPtrToString(input.Latitude)),
-			Longitude: sqlnull.StringPtr(floatPtrToString(input.Longitude)),
-
-			CreatedAt: sqlnull.Time(now),
+			Latitude:          sqlnull.StringPtr(floatPtrToString(input.Latitude)),
+			Longitude:         sqlnull.StringPtr(floatPtrToString(input.Longitude)),
+			CreatedAt:         sqlnull.Time(now),
 		})
 		if err != nil {
 			return errors.NewTableError("shipping_addresses.insert", err.Error())
+		}
+
+		// ✅ NEW: status -> ready_to_order (guards status transition)
+		_, err = q.MarkCheckoutSessionReadyToOrder(ctx, sqlc.MarkCheckoutSessionReadyToOrderParams{
+			ID:     input.CheckoutSessionID,
+			UserID: input.UserID,
+		})
+		if err != nil {
+			// common case when WHERE status='awaiting_shipping_info' didn't match
+			if stdErrors.Is(err, sql.ErrNoRows) {
+				return errors.NewValidationError("checkout_session", "invalid session status")
+			}
+			return errors.NewTableError("checkout_sessions.status", err.Error())
 		}
 
 		result = &AddShippingAddressResult{
@@ -188,17 +234,14 @@ func (s *AddShippingAddressService) Start(ctx context.Context, input AddShipping
 	return result, nil
 }
 
-// func max(a, b float64) float64 {
-// 	if a > b {
-// 		return a
-// 	}
-// 	return b
-// }
+func moneyToCentsTwo(s string) (int64, error) {
+	f, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return 0, err
+	}
+	return int64(math.Round(f * 100)), nil
+}
 
-// func floatPtrToString(f *float64) *string {
-// 	if f == nil {
-// 		return nil
-// 	}
-// 	s := fmt.Sprintf("%.7f", *f)
-// 	return &s
-// }
+func centsToMoneyTwo(cents int64) string {
+	return fmt.Sprintf("%.2f", float64(cents)/100)
+}

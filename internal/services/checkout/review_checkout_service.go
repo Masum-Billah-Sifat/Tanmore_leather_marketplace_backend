@@ -36,11 +36,6 @@ type ReviewCheckoutResult struct {
 	InvalidItems    []InvalidCheckoutItem                 `json:"invalid_items"`
 }
 
-// type InvalidCheckoutItem struct {
-// 	VariantID uuid.UUID `json:"variant_id"`
-// 	Reason    string    `json:"failure_reason"`
-// }
-
 // ------------------------------------------------------------
 // 🧱 Dependencies
 
@@ -60,13 +55,13 @@ func (s *ReviewCheckoutService) Start(
 	// Step 1: Check user moderation
 	user, err := s.Repo.GetUserByID(ctx, input.UserID)
 	if err != nil {
-		return nil, errors.NewNotFoundError("user")
+		return nil, errors.ErrAuthUserNotFound()
 	}
 	if user.IsArchived {
-		return nil, errors.NewAuthError("user is archived")
+		return nil, errors.ErrAuthArchivedUser()
 	}
 	if user.IsBanned {
-		return nil, errors.NewAuthError("user is banned")
+		return nil, errors.ErrAuthBannedUser()
 	}
 
 	// Step 2: Get checkout session
@@ -76,6 +71,14 @@ func (s *ReviewCheckoutService) Start(
 	}
 	if session.UserID != input.UserID {
 		return nil, errors.NewAuthError("checkout session does not belong to user")
+	}
+	// after session fetch + ownership check
+	if session.Status != "ready_to_order" {
+		return nil, errors.NewValidationError("checkout_session", "invalid session status")
+	}
+
+	if !session.ShippingAddressID.Valid {
+		return nil, errors.NewServerError("shipping address missing")
 	}
 
 	// Step 3: Get shipping address if set

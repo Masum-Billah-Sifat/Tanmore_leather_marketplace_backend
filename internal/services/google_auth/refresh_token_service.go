@@ -117,7 +117,7 @@ func (s *RefreshTokenService) HandleRefreshTokenRotation(ctx context.Context, in
 			return errors.NewServerError("inserting new refresh token")
 		}
 
-		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 1)
+		accessToken, err := token.GenerateAccessToken(user.ID, session.ID, user.CurrentMode, 15)
 		if err != nil {
 			return errors.NewServerError("generating access token")
 		}

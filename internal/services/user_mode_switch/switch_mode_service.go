@@ -106,7 +106,7 @@ func (s *SwitchModeService) Handle(ctx context.Context, input SwitchModeInput) (
 	}
 
 	// Step 6: Generate new access token
-	accessToken, err := token.GenerateAccessToken(user.ID, input.SessionID, input.ToMode, 1)
+	accessToken, err := token.GenerateAccessToken(user.ID, input.SessionID, input.ToMode, 15)
 	if err != nil {
 		return nil, errors.NewServerError("generating access token")
 	}

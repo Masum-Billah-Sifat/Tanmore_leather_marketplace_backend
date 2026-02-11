@@ -109,3 +109,12 @@ SET
     delivery_charge = $1,
     total_payable = $2
 WHERE id = $3;
+
+
+-- name: MarkCheckoutSessionReadyToOrder :one
+UPDATE checkout_sessions
+SET status = 'ready_to_order'
+WHERE id = $1
+  AND user_id = $2
+  AND status = 'awaiting_shipping_info'
+RETURNING id;
